@@ -1,0 +1,32 @@
+# =============================================================================
+# CI — build the backend & frontend Docker images on every push.
+# -----------------------------------------------------------------------------
+# This is the "CI" half of the pipeline: it verifies that the exact artifacts
+# deploy.sh will later push to Docker Hub actually build cleanly. It needs no
+# secrets and no Docker Hub login (nothing is pushed here).
+#
+# The "CD" half lives in deploy.yml (build, push & deploy to AWS EC2), which
+# auto-triggers on pushes to main or can be run manually with:
+#   gh workflow run "Deploy MERN to EC2" --ref <branch>
+# =============================================================================
+name: CI - Build images
+
+on:
+  push:                 # runs on every push to ANY branch
+  workflow_dispatch:    # allow manual runs too
+
+jobs:
+  build:
+    name: Build backend & frontend images
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Plain `docker build` (mirrors deploy.sh) — Docker is preinstalled on
+      # ubuntu-latest runners, so no extra setup is required.
+      - name: Build backend image
+        run: docker build -t mern-expense:backend ./backend
+
+      - name: Build frontend image
+        run: docker build -t mern-expense:frontend ./frontend
