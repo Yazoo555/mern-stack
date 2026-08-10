@@ -1,0 +1,194 @@
+================================================================================
+ Useme — How to use the MERN Expense Tracker automation scripts
+================================================================================
+
+This repository contains a MERN (MongoDB, Express, React, Node.js) expense
+tracker and three automation scripts that deploy it to AWS EC2:
+
+  deploy.sh          One-command deployment to AWS EC2 (build, push, launch,
+                     provision, health-check)
+  destroy.sh         Safe teardown of the AWS resources created by deploy.sh
+  set-aws-creds.sh   Paste fresh AWS lab credentials after every lab restart
+                     (needed for training labs such as VOC Labs)
+
+Quick start (training-lab workflow — do this after EVERY lab start):
+
+  1. ./set-aws-creds.sh     # paste the [default] block from the lab's
+                            # "AWS Details" panel, then press Ctrl-D
+  2. ./deploy.sh            # build, push and deploy to EC2
+  3. ./destroy.sh --yes     # (when finished) stop paying lab time / clean up
+
+The app is then reachable at the URLs printed at the end of deploy.sh:
+  Frontend : http://<PUBLIC_IP>:5173
+  Backend  : http://<PUBLIC_IP>:5000/api/expenses
+
+
+--------------------------------------------------------------------------------
+1) PREREQUISITES (one-time)
+--------------------------------------------------------------------------------
+
+* Docker installed and running (docker daemon).
+* AWS CLI installed (aws).
+* ssh / scp / curl available (standard on Linux/macOS).
+* Logged in to Docker Hub:  docker login   (or set DOCKER_HUB_TOKEN).
+* AWS credentials available — either:
+    - a training lab (VOC Labs / Vocareum): credentials are pasted with
+      set-aws-creds.sh (see section 3), or
+    - your own AWS account: run  aws configure  once.
+
+Run from the repository root (the folder containing deploy.sh):
+  cd /run/media/yajju/DATA/dockerprac/mern-stack
+
+
+--------------------------------------------------------------------------------
+2) DEPLOY: ./deploy.sh
+--------------------------------------------------------------------------------
+
+What it does, in order:
+  1. Preflight      — checks docker/aws/ssh/scp/curl, Docker Hub login,
+                      AWS credentials AND EC2 access (fails fast with a clear
+                      message if the account blocks EC2).
+  2. Build & push   — builds backend + frontend images and pushes them to
+                      Docker Hub (yazoo555/docker-recepie).
+  3. Key pair       — reuses the EC2 key pair 'mern-ec2-key' if it exists,
+                      otherwise creates it and saves the PEM to
+                      ~/.ssh/mern-ec2-key.pem.
+  4. Security group — reuses/creates 'mern-app-sg' with ports 22, 5000, 5173.
+  5. Instance       — reuses an instance tagged 'mern-app-server' (a stopped
+                      one is started, a running one is used as-is); only
+                      launches a new t2.micro Amazon Linux 2023 if none exists.
+  6. Elastic IP     — allocates an Elastic IP (reuses the one tagged
+                      'mern-app-server' from earlier deploys) and associates it,
+                      so the public IP stays the same across stop/start.
+  7. Provision      — installs Docker + Compose on the instance.
+  8. Deploy         — generates docker-compose.yml with the Elastic IP baked
+                      into the frontend's API URL, pulls images, starts
+                      mongodb + backend + frontend.
+  9. Verify         — waits until backend and frontend return HTTP 200, then
+                      prints the public URLs.
+
+Basic usage:
+  ./deploy.sh                      full pipeline (build, push, deploy, verify)
+  ./deploy.sh --help               show all options and environment variables
+
+Options:
+  --build-only     Build & push Docker images only (no AWS work)
+  --deploy-only    Deploy to EC2 only (images must already be on Docker Hub)
+  --skip-build     Skip the build; push the existing local images
+  --skip-push      Build images locally but do not push to Docker Hub
+
+Useful environment overrides (all optional, run before the command):
+  AWS_REGION=us-east-1             AWS region
+  INSTANCE_NAME=my-server          instance Name tag (reused if running)
+  INSTANCE_TYPE=t2.micro           EC2 instance type
+  KEY_NAME=mern-ec2-key            EC2 key pair name
+  SG_NAME=mern-app-sg              security group name
+  DOCKER_HUB_USER=yazoo555         Docker Hub username
+  DOCKER_HUB_TOKEN=...             Docker Hub access token (auto docker login)
+  EIP_ALLOCATION_ID=<alloc-id>     use a specific Elastic IP (otherwise the one
+                                   tagged with INSTANCE_NAME is reused)
+  OUTPUT_FILE=deploy.env           append machine-readable results to a file
+
+Example:
+  AWS_REGION=eu-west-1 OUTPUT_FILE=deploy.env ./deploy.sh
+
+IMPORTANT: deploy.sh is idempotent — running it again safely re-deploys and
+reuses the existing key pair, security group, instance (stopped instances are
+started and reused, never duplicated), and Elastic IP — the public IP never
+changes, even after the instance is stopped and started again.
+
+
+--------------------------------------------------------------------------------
+3) LAB CREDENTIALS: ./set-aws-creds.sh  (training labs only)
+--------------------------------------------------------------------------------
+
+Training labs issue NEW temporary AWS credentials every time the lab is stopped
+and restarted. Without fresh credentials, deploy.sh fails with errors like
+"credentials invalid/expired" or "explicit deny". So after every lab start:
+
+  ./set-aws-creds.sh
+
+  - The script asks you to paste the whole "[default]" block from the lab's
+    "AWS Details" panel (aws_access_key_id, aws_secret_access_key,
+    aws_session_token).
+  - Press Enter, then Ctrl-D on a new line to finish pasting.
+  - It backs up the previous ~/.aws/credentials (timestamped .bak file),
+    saves the new one, verifies it with aws sts get-caller-identity, and
+    probes EC2 access.
+  - Success message:  "EC2 access OK — you can now run: ./deploy.sh"
+  - If it says EC2 access is still denied, the lab session is still blocked:
+    End Lab -> wait 15-30 min -> Start Lab, or contact the lab provider.
+
+Then run the deployment:
+  ./deploy.sh
+
+
+--------------------------------------------------------------------------------
+4) TEARDOWN: ./destroy.sh
+--------------------------------------------------------------------------------
+
+Removes the AWS resources created by deploy.sh (terminates the instance,
+releases the Elastic IP so it stops being billed, deletes the key pair and the
+security group). Use it when you are done so the lab stops being charged / the
+account stays clean.
+
+  ./destroy.sh                     show what will be deleted, ask for confirmation
+  ./destroy.sh --yes               skip the confirmation prompt (also auto in CI)
+  ./destroy.sh --dry-run           preview only — delete nothing
+  ./destroy.sh --delete-key-file   also remove the local PEM (~/.ssh/mern-ec2-key.pem)
+
+NOTE: it keeps the local PEM by default, so you can re-deploy with the same
+key. Pass --delete-key-file only if you really want to remove it.
+
+
+--------------------------------------------------------------------------------
+5) COMMON ERRORS AND FIXES
+--------------------------------------------------------------------------------
+
+A. "explicit deny" / UnauthorizedOperation (e.g. policy 'voc-cancel-cred')
+   The AWS account/lab has revoked EC2 permissions. Not a script bug.
+   Fix: restart the lab properly (End Lab -> wait -> Start Lab) so a fresh
+   session with working permissions is provisioned, then re-run
+   ./set-aws-creds.sh and ./deploy.sh. Or use an AWS account with EC2 access.
+
+B. "Key pair 'mern-ec2-key' exists on AWS but no non-empty PEM found"
+   AWS stores only the PUBLIC key; the private PEM is missing/empty locally,
+   so the existing key pair is unusable.
+   Fix: delete the stale key pair and re-run:
+       aws ec2 delete-key-pair --key-name mern-ec2-key
+       rm -f ~/.ssh/mern-ec2-key.pem
+       ./deploy.sh
+   (deploy.sh will create a brand-new key pair and save the PEM.)
+
+C. "AWS credentials invalid/expired"
+   Fix: run  ./set-aws-creds.sh  to paste the current lab credentials (they
+   expire when the lab session ends).
+
+D. Docker build/push fails or "Not logged in to Docker Hub"
+   Fix: docker login, or set DOCKER_HUB_TOKEN and re-run.
+
+E. Health check fails after deploy (backend/frontend not HTTP 200)
+   Inspect on the server with:
+       ssh -i ~/.ssh/mern-ec2-key.pem ec2-user@<PUBLIC_IP> \
+         'cd ~/app && sudo docker compose ps && sudo docker compose logs --tail 50'
+   Then simply re-run  ./deploy.sh  (it re-deploys the latest images).
+
+F. GitHub Actions (CI/CD)
+   The workflow .github/workflows/deploy.yml runs ./deploy.sh automatically on
+   pushes to main. It needs repo secrets: AWS_ACCESS_KEY_ID,
+   AWS_SECRET_ACCESS_KEY, DOCKERHUB_USERNAME, DOCKERHUB_TOKEN.
+
+
+--------------------------------------------------------------------------------
+6) TIPS
+--------------------------------------------------------------------------------
+
+* After a successful deploy, note the public IP printed at the end — it is an
+  Elastic IP, so it stays the same across stop/start until you run destroy.sh
+  (which releases it).
+* Lab session credentials expire when the lab stops. Always re-run
+  set-aws-creds.sh at the start of a new session before deploy.sh.
+* deploy.sh is safe to re-run (idempotent); destroy.sh is destructive — it
+  deletes real AWS resources, so use --dry-run first if unsure.
+
+================================================================================

@@ -1,0 +1,63 @@
+# Production Docker Compose for the MERN Expense Tracker (EC2 deployment)
+# Uses images pulled from Docker Hub instead of building locally.
+#
+# WARNING: this file is a TEMPLATE — deploy.sh substitutes the instance's real
+# public IP for __EC2_PUBLIC_IP__ before copying it to the server. Running this
+# file directly (sudo docker compose up -d) will give the frontend a broken
+# API URL. Use ./deploy.sh to deploy.
+#
+# Manual deploy on EC2 (after deploy.sh placed the generated file at ~/app/):
+#   sudo docker compose up -d
+services:
+  # ---- MongoDB database ----
+  mongodb:
+    image: mongo:latest
+    container_name: mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongovol:/data/db   # named volume persists data across restarts
+    networks:
+      - mern-network
+
+  # ---- Node.js / Express backend (from Docker Hub) ----
+  backend:
+    image: yazoo555/docker-recepie:backend
+    container_name: mernbackendcon
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      # "mongodb" is the Docker service name, resolvable inside mern-network
+      - MONGO_URI=mongodb://mongodb:27017/expense-tracker
+      - PORT=5000
+    depends_on:
+      - mongodb
+    networks:
+      - mern-network
+
+  # ---- React frontend (from Docker Hub) ----
+  frontend:
+    image: yazoo555/docker-recepie:frontend
+    container_name: mernfrontendcon
+    restart: unless-stopped
+    ports:
+      - "5173:5173"
+    environment:
+      # Browser must reach the backend via the EC2 public IP.
+      # The frontend appends "/api/expenses" to this URL -> no duplicate /api path.
+      # deploy.sh replaces __EC2_PUBLIC_IP__ with the instance's real public IP.
+      - VITE_API_URL=http://__EC2_PUBLIC_IP__:5000
+    depends_on:
+      - backend
+    networks:
+      - mern-network
+
+# Named volume for MongoDB data
+volumes:
+  mongovol:
+
+# Internal network shared by all services
+networks:
+  mern-network:

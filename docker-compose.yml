@@ -1,0 +1,46 @@
+# Docker Compose file for the MERN Expense Tracker
+# Run with: docker compose up --build
+services:
+  # ---- MongoDB database ----
+  mongodb:
+    image: mongo:latest
+    container_name: mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongovol:/data/db   # named volume persists data across restarts
+    networks:
+      - mern-network
+
+  # ---- Node.js / Express backend ----
+  backend:
+    build: ./backend        # build from backend/Dockerfile
+    container_name: mernbackendcon
+    ports:
+      - "5000:5000"
+    environment:
+      # "mongodb" is the service name, resolvable from inside the Docker network
+      - MONGO_URI=mongodb://mongodb:27017/expense-tracker
+    depends_on:
+      - mongodb
+    networks:
+      - mern-network
+
+  # ---- React frontend ----
+  frontend:
+    build: ./frontend       # build from frontend/Dockerfile
+    container_name: mernfrontendcon
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+    networks:
+      - mern-network
+
+# Named volume for MongoDB data
+volumes:
+  mongovol:
+
+# Internal network shared by all services
+networks:
+  mern-network:

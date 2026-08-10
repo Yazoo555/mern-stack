@@ -1,0 +1,69 @@
+# =============================================================================
+# GitHub Actions workflow — build, push & deploy the MERN app to AWS EC2
+# -----------------------------------------------------------------------------
+# Uses deploy.sh, which is idempotent: it reuses the existing key pair, security
+# group, instance (started if stopped) and Elastic IP (tagged INSTANCE_NAME), so
+# re-runs are safe and the public IP stays the same.
+#
+# Required repository secrets:
+#   AWS_ACCESS_KEY_ID      AWS IAM access key (EC2 + VPC permissions)
+#   AWS_SECRET_ACCESS_KEY  matching secret
+#   DOCKERHUB_USERNAME     Docker Hub username
+#   DOCKERHUB_TOKEN        Docker Hub access token (Hub -> Account Settings -> Security)
+#
+# Optional (recommended): replace the AWS keys with OIDC role assumption —
+#   role-to-assume: arn:aws:iam::<ACCOUNT_ID>:role/<github-actions-role>
+# (uncomment the block below and remove the aws-access-key-id lines)
+#
+# If you split this into separate build / deploy jobs (--build-only then
+# --deploy-only), the deploy job needs the EC2 key PEM ($KEY_PATH, default
+# ~/.ssh/mern-ec2-key.pem) which is created in the build job — persist it
+# with actions/upload-artifact + actions/download-artifact, or store it as a
+# secret and write it to $KEY_PATH before running deploy.sh.
+# =============================================================================
+name: Deploy MERN to EC2
+
+on:
+  workflow_dispatch:          # manual trigger
+  push:
+    branches: [main]          # auto-deploy on pushes to main
+
+permissions:
+  id-token: write             # needed for OIDC role assumption
+  contents: read
+
+jobs:
+  deploy:
+    name: Build, push & deploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+          # ---- OIDC alternative (recommended for production) ----
+          # role-to-assume: arn:aws:iam::<ACCOUNT_ID>:role/github-actions-ec2
+          # role-duration-seconds: 900
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build, push & deploy
+        env:
+          DOCKER_HUB_USER: ${{ secrets.DOCKERHUB_USERNAME }}
+          PUSH_IMAGES: "true"
+          OUTPUT_FILE: ${{ github.workspace }}/deploy-output.env
+        run: |
+          chmod +x deploy.sh
+          ./deploy.sh
+
+      - name: Show public URLs
+        run: cat ${{ github.workspace }}/deploy-output.env
