@@ -20,6 +20,9 @@
 # ~/.ssh/mern-ec2-key.pem) which is created in the build job — persist it
 # with actions/upload-artifact + actions/download-artifact, or store it as a
 # secret and write it to $KEY_PATH before running deploy.sh.
+#
+# Manual trigger from the CLI (runs the pipeline on any branch):
+#   gh workflow run "Deploy MERN to EC2" --ref <branch>
 # =============================================================================
 name: Deploy MERN to EC2
 
