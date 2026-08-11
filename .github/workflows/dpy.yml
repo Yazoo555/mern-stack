@@ -1,0 +1,55 @@
+name: Basic Jobs Demo
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  echo-vars-and-secrets:
+    name: 1 - Echo Variables and Secrets
+    runs-on: ubuntu-latest
+    environment: development
+
+    env:
+      MY_VARIABLE: ${{ vars.MY_VARIABLE }}
+      MY_SECRET: ${{ secrets.MY_SECRET }}
+
+    steps:
+      - name: Echo repository variable
+        run: echo "MY_VARIABLE=$MY_VARIABLE"
+
+      - name: Echo repository secret (value is masked as *** in the logs)
+        run: echo "MY_SECRET=$MY_SECRET"
+
+      - name: Echo built-in GITHUB_TOKEN secret (always available, also masked)
+        run: echo "GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }}"
+
+  run-shell-script:
+    name: 2 - Use a Shell Script with Vars and Secrets
+    runs-on: ubuntu-latest
+    needs: echo-vars-and-secrets
+    environment: development
+
+    env:
+      MY_VARIABLE: ${{ vars.MY_VARIABLE }}
+      MY_SECRET: ${{ secrets.MY_SECRET }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Make script executable
+        run: chmod +x .github/workflows/print-vars-and-secrets.sh
+
+      - name: Run script
+        run: ./.github/workflows/print-vars-and-secrets.sh
+
+  pull-mongo-image:
+    name: 3 - Pull MongoDB
+    runs-on: ubuntu-latest
+    needs: run-shell-script
+
+    steps:
+      - name: Pull MongoDB Docker image
+        run: docker pull mongo:latest
