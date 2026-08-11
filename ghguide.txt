@@ -1,0 +1,495 @@
+================================================================================
+ ghguide.txt — CI/CD with GitHub Actions + the GitHub CLI (gh)
+ Complete beginner guide for the MERN Expense Tracker project
+================================================================================
+
+This file explains, in plain language, everything about the CI/CD pipeline that
+is now set up in this repository:
+
+  * What CI/CD even means (no jargon)
+  * How GitHub Actions works
+  * Exactly what was created in your repo
+  * How to use the gh command-line tool for everything
+  * Step-by-step recipes: trigger, watch, debug, and deploy
+  * The secrets you must set, and where to get them
+  * Common errors and fixes
+  * A glossary of all the terms
+
+Read it top to bottom once, then keep it as a reference. You do NOT need to
+understand everything at once — each section is independent.
+
+================================================================================
+1) WHAT IS CI/CD? (the 2-minute version)
+================================================================================
+
+CI/CD is a way of letting a robot (GitHub) do your boring, repetitive work
+automatically every time you change your code.
+
+  CI  = Continuous Integration
+       "Check the new code is not broken."
+       Every time you push code, GitHub builds your project. If it builds,
+       good. If it breaks, you find out in minutes instead of days.
+
+  CD  = Continuous Delivery / Deployment
+       "Ship the checked code to the world."
+       Once the code is OK, GitHub builds the finished product (Docker
+       images), uploads them, and starts them on a server (your AWS EC2
+       instance) so the app is live.
+
+Analogy: think of a restaurant kitchen.
+  - The cook (you) writes a new recipe (code).
+  - The quality check (CI) tastes it and says "ok" or "this is burnt".
+  - The delivery service (CD) takes the approved dish to the customer.
+
+In YOUR repo specifically:
+  - CI  = "CI - Build images"  → builds your 2 Docker images on every push.
+  - CD  = "Deploy MERN to EC2" → pushes those images to Docker Hub and
+          launches them on your AWS EC2 server.
+
+================================================================================
+2) HOW GITHUB ACTIONS WORKS (the pieces)
+================================================================================
+
+A "workflow" is a file (written in YAML) inside the folder:
+
+    .github/workflows/
+
+GitHub reads these files and runs them on its own computers ("runners").
+Each workflow has 4 important pieces:
+
+  a) name:          a friendly name shown in the Actions tab.
+  b) on:            the TRIGGER — WHEN the workflow runs.
+                    Examples:
+                      push:                every push to any branch
+                      push: {branches:[main]}   only pushes to main
+                      workflow_dispatch:   manual trigger (you click a button
+                                           or use gh to start it)
+                      pull_request:        when someone opens/updates a PR
+  c) jobs:          the big steps of the pipeline (e.g. "build", "deploy").
+  d) steps:         the individual commands inside a job (e.g. "checkout",
+                    "run docker build", "run deploy.sh").
+
+When a trigger fires, GitHub:
+  1. starts a fresh virtual computer (runner, e.g. ubuntu-latest)
+  2. runs your steps one by one, top to bottom
+  3. shows the result in the Actions tab: success (green) or failure (red)
+
+SECRETS are passwords stored safely in GitHub (Settings → Secrets → Actions).
+Your workflow files can use them without writing them in the code:
+    ${{ secrets.AWS_ACCESS_KEY_ID }}
+Never put real passwords/tokens directly in a workflow file.
+
+================================================================================
+3) WHAT IS ALREADY SET UP IN YOUR REPO (and what each line does)
+================================================================================
+
+Your repo currently has TWO workflow files. They are already pushed to GitHub
+and already registered (you verified this). Here is what each one does:
+
+--------------------------------------------------------------------------------
+3a) .github/workflows/ci.yml   — the CI half
+--------------------------------------------------------------------------------
+  name: CI - Build images
+  on:
+    push:                 # runs on EVERY push to ANY branch (including yours)
+    workflow_dispatch:    # ...and can be started manually
+  jobs:
+    build:
+      runs-on: ubuntu-latest
+      steps:
+        - checkout the code
+        - docker build -t mern-expense:backend ./backend     # backend image
+        - docker build -t mern-expense:frontend ./frontend   # frontend image
+
+  What this means for you: every time you push ANY change to ANY branch,
+  GitHub automatically builds both Docker images. If they build, CI passes.
+  This needs NO secrets and NO money — it is completely free to run.
+
+  Result you should see (checked during setup): 2 green "success" runs.
+
+--------------------------------------------------------------------------------
+3b) .github/workflows/deploy.yml   — the CD half
+--------------------------------------------------------------------------------
+  name: Deploy MERN to EC2
+  on:
+    workflow_dispatch:        # manual trigger (button or gh command)
+    push:
+      branches: [main]        # automatic deploy when you push/merge to main
+  jobs:
+    deploy:
+      steps:
+        - checkout the code
+        - Configure AWS credentials     (needs AWS_ACCESS_KEY_ID,
+                                         AWS_SECRET_ACCESS_KEY,
+                                         AWS_SESSION_TOKEN)
+        - Log in to Docker Hub          (needs DOCKERHUB_USERNAME,
+                                         DOCKERHUB_TOKEN)
+        - Run ./deploy.sh               (builds + pushes images to Docker Hub,
+                                         creates/ reuses an EC2 instance,
+                                         Elastic IP, installs Docker, pulls
+                                         the images, starts MongoDB + backend
+                                         + frontend, health-checks it)
+        - Print the public URLs (frontend / backend)
+
+  What this means for you: this is the "ship it" button. It deploys your app
+  to a real AWS server. IMPORTANT: it only auto-runs on pushes to the "main"
+  branch. Pushing to "firstbranch" will NOT deploy automatically — that is
+  by design (you test on your branch, deploy when you merge).
+
+  It needs 5 secrets (section 7) or it will fail at the credentials step —
+  that is exactly what you saw in the test run, and it is expected.
+
+  Because your AWS lab credentials are TEMPORARY (they include a session
+  token that changes every time you log in), re-run ./set-gh-secrets.sh after
+  each login so the workflow always uses your CURRENT credentials.
+
+================================================================================
+4) THE GITHUB CLI (gh) — what it is and its current status on your machine
+================================================================================
+
+"gh" is a program that lets you control GitHub from the terminal instead of
+clicking around the website. You can see workflows, start runs, watch them,
+set secrets, create repos, open PRs — all with simple commands.
+
+Current status on YOUR machine (already done for you):
+  * gh version 2.97.0 installed at:  ~/.local/bin/gh
+  * The folder was added to your PATH in ~/.bashrc, so in a NEW terminal
+    window you can just type "gh".
+  * Already logged in as:  Yazoo555  (token scopes: repo, workflow, ...)
+
+To open a terminal on your machine and use gh:
+  - just open your terminal app (new window), then type the commands below.
+
+To check it is alive, run:
+  gh --version        # shows the version
+  gh auth status      # shows which account is logged in
+
+If you ever need to log in again (e.g. new machine):
+  gh auth login       # follow the prompts; a browser window will appear
+
+================================================================================
+5) YOUR DAILY COMMAND CHEAT SHEET (print this page)
+================================================================================
+
+  gh workflow list                          # see all workflows + if active
+  gh run list                               # recent pipeline runs
+  gh run list --workflow "Deploy MERN to EC2"   # runs of just the deploy
+  gh run watch                              # follow the LATEST run live
+  gh run watch <run-id>                     # follow a specific run
+  gh run view <run-id>                      # summary of one run
+  gh run view <run-id> --log-failed         # the failing step's log lines
+  gh run rerun <run-id>                     # re-run a failed run
+  gh run cancel <run-id>                    # stop a running run
+
+  gh workflow run "Deploy MERN to EC2" --ref firstbranch   # TRIGGER deploy
+  gh workflow run "CI - Build images" --ref firstbranch    # TRIGGER CI
+
+  gh secret list                            # see which secrets exist (names only)
+  gh secret set NAME                        # set a secret (asks you to type it)
+  gh secret set NAME --body "value"         # set a secret non-interactively
+  gh secret delete NAME                     # remove a secret
+
+  gh auth status                            # who am I logged in as?
+  gh repo view                              # repo info
+  gh browse                                 # open the repo in your browser
+
+================================================================================
+6) STEP-BY-STEP RECIPES (the "how do I actually use it" part)
+================================================================================
+
+--------------------------------------------------------------------------------
+RECIPE A — First-time setup: set the 4 secrets (do this ONCE)
+--------------------------------------------------------------------------------
+The deploy workflow cannot work without these. Open a terminal and run each
+line; gh will ask you to type/paste the value:
+
+  gh secret set AWS_ACCESS_KEY_ID
+  gh secret set AWS_SECRET_ACCESS_KEY
+  gh secret set AWS_SESSION_TOKEN
+  gh secret set DOCKERHUB_USERNAME
+  gh secret set DOCKERHUB_TOKEN
+
+Check they are stored:
+  gh secret list
+
+EASIER — one script does all 5 for you, and you re-run it after every login
+(because the lab credentials change). Edit ./gh-secrets.env with your current
+values, then run:
+
+  ./set-gh-secrets.sh
+
+(You can also run it with no arguments and paste the [default] block when
+prompted, exactly like ./set-aws-creds.sh.)
+
+Where the values come from (section 7 explains in detail):
+  - AWS keys: from an AWS IAM user that has EC2 permissions.
+  - Docker Hub: username + an access token from
+    https://hub.docker.com → Account Settings → Security → Access Tokens.
+
+NOTE for training labs (VOC Labs / Vocareum): lab AWS credentials expire when
+the lab restarts. For GitHub Actions, prefer keys from a dedicated IAM user.
+For deploying FROM YOUR OWN MACHINE, use ./set-aws-creds.sh (section 10).
+
+--------------------------------------------------------------------------------
+RECIPE B — Make a code change and let CI check it (everyday workflow)
+--------------------------------------------------------------------------------
+  # 1. see what changed
+  git status
+
+  # 2. add and commit your change
+  git add .
+  git commit -m "my change description"
+
+  # 3. push to YOUR branch (this triggers the CI workflow automatically)
+  git push origin firstbranch
+
+  # 4. watch CI run (optional, but fun!)
+  gh run watch
+
+  Expected result: run "CI - Build images" → success in ~30 seconds.
+  If it fails:  gh run view <run-id> --log-failed   to see why.
+
+--------------------------------------------------------------------------------
+RECIPE C — Deploy on demand (any branch, manually)
+--------------------------------------------------------------------------------
+  # deploy whatever is on your branch right now:
+  gh workflow run "Deploy MERN to EC2" --ref firstbranch
+
+  # watch it:
+  gh run watch
+
+  # after it finishes, read the public URLs from the log:
+  gh run view <run-id> --log-failed    # or view the full log for the last step
+
+  Typical output at the end (printed by deploy.sh):
+    frontend_url=http://<PUBLIC_IP>:5173
+    backend_url=http://<PUBLIC_IP>:5000
+
+  The IP is an Elastic IP — it stays the same across re-deploys.
+  Full deploy takes several minutes (builds, pushes, provisions server).
+
+--------------------------------------------------------------------------------
+RECIPE D — Deploy automatically (the "proper" flow with main)
+--------------------------------------------------------------------------------
+  1. On GitHub (or with gh pr create), open a Pull Request from your branch
+     into "main".
+  2. When you merge the PR, code lands on main.
+  3. The push to main automatically starts "Deploy MERN to EC2".
+  4. Watch it:  gh run watch
+  5. Your app is now live at the URL printed in the log.
+
+  Why bother? Because you test on your branch, and only merge+deploy when
+  you are sure. This is how real teams work.
+
+--------------------------------------------------------------------------------
+RECIPE E — A run failed. What now?
+--------------------------------------------------------------------------------
+  1. Find the run:        gh run list
+  2. See the summary:     gh run view <run-id>
+  3. See the error log:   gh run view <run-id> --log-failed
+  4. Read the section 8 troubleshooting table below.
+  5. Fix, commit, push (CI runs again), then deploy again.
+  6. You can also simply retry without changes:  gh run rerun <run-id>
+
+--------------------------------------------------------------------------------
+RECIPE F — Disable / enable / edit a workflow
+--------------------------------------------------------------------------------
+  gh workflow list                  # get the name
+  gh workflow disable "CI - Build images"
+  gh workflow enable  "CI - Build images"
+
+  To edit what a workflow does: edit the YAML file in .github/workflows/,
+  then commit and push. The new version applies to the next runs.
+
+================================================================================
+7) SECRETS — the 5 you need, where to get them
+================================================================================
+
+Secrets = encrypted values stored in GitHub, referenced as ${{ secrets.NAME }}
+in workflows. GitHub never shows them again after you set them.
+
+ 1) AWS_ACCESS_KEY_ID        Your AWS access key ID.
+ 2) AWS_SECRET_ACCESS_KEY    Your AWS secret access key (the long one).
+ 3) AWS_SESSION_TOKEN        The session token. REQUIRED — your lab issues
+                             TEMPORARY credentials, which always include an
+                             aws_session_token line in the [default] block.
+                             The deploy workflow passes it to AWS so the
+                             temporary credentials actually work.
+    Where (1-3): the [default] block from your lab's "AWS Details" panel —
+    or AWS Console → IAM → Users → create a user → "Security credentials" →
+    "Create access key" (the user needs a policy that allows EC2 + VPC
+    actions, e.g. AmazonEC2FullAccess is easiest for learning). WARNING: the
+    secret key is shown only once when you create it — copy it immediately.
+
+ 4) DOCKERHUB_USERNAME       Your Docker Hub username (e.g. yazoo555).
+ 5) DOCKERHUB_TOKEN          A Docker Hub access token.
+    Where: hub.docker.com → Account Settings → Security → New Access Token.
+    (Not the same as your Docker Hub password.)
+
+Since the lab credentials change every login, do NOT set these by hand each
+time — run ./set-gh-secrets.sh (section 10), which updates all 5 at once.
+
+Recommended (more secure, optional): replace the AWS access keys with OIDC so
+GitHub assumes an AWS role instead of using long-lived keys. The deploy.yml
+file has commented instructions for this.
+
+================================================================================
+8) COMMON ERRORS AND FIXES
+================================================================================
+
+  ERROR / symptom                          FIX
+  ---------------------------------------  -------------------------------------
+  "Credentials could not be loaded ..."    The 4 secrets are missing or wrong.
+  (deploy fails at Configure AWS creds)    Run RECIPE A, then rerun the deploy.
+
+  "docker login failed"                    DOCKERHUB_USERNAME/TOKEN wrong, or
+                                           token not an Access Token.
+
+  "AWS credentials invalid/expired"        Lab credentials expired. Locally run
+                                           ./set-aws-creds.sh (section 10).
+                                           For CI, use a dedicated IAM user.
+
+  "explicit deny / UnauthorizedOperation"  Your AWS account/lab has revoked
+  (EC2 APIs blocked)                       EC2 permissions. Restart the lab or
+                                           use an account with EC2 access.
+
+  CI passed but nothing deployed           Correct! CI only builds. Deploy runs
+                                           only on main pushes or manual trigger
+                                           (RECIPE C / D).
+
+  Workflow does not appear in             Usually GitHub needs the file pushed
+  "gh workflow list"                       to the DEFAULT branch. If it is and
+                                           still missing, push a trivial change
+                                           (e.g. a comment) to re-register it.
+
+  "Node 20 is deprecated" warning          Harmless warning — actions still run
+                                           on Node 24.
+
+  Deployment stuck / health check fails    ssh into the server and inspect:
+                                           ssh -i ~/.ssh/mern-ec2-key.pem ec2-user@<IP>
+                                           cd ~/app && sudo docker compose ps
+                                           sudo docker compose logs --tail 50
+
+================================================================================
+9) GLOSSARY (all the words, in one place)
+================================================================================
+
+  git          The tool that tracks every version of your code.
+  repo         Your project on GitHub (Yazoo555/mern-stack).
+  branch       A separate copy of the code you work on (you are on
+               "firstbranch"). Changes there don't touch main until merged.
+  commit       A saved snapshot of your changes, with a message.
+  push         Send your local commits to GitHub.
+  pull         Download commits from GitHub to your machine.
+  merge        Combine one branch's changes into another (e.g. into main).
+  PR (pull
+  request)     A formal proposal "please merge my branch into main".
+  main         The default/production branch. Deploys trigger on this.
+  remote       The GitHub copy of your repo ("origin").
+  CI           Continuous Integration: build + check on every push.
+  CD           Continuous Delivery/Deployment: ship to a server.
+  workflow     A YAML file in .github/workflows that defines a pipeline.
+  trigger      The "on:" condition that starts a workflow.
+  event        Something that happened on GitHub (a push, a PR, manual...).
+  job          A big phase of a workflow (e.g. "build", "deploy").
+  step         One command inside a job.
+  runner       GitHub's virtual machine that executes the workflow.
+  action       A reusable piece of a workflow (e.g. actions/checkout@v4).
+  secret       An encrypted value stored in GitHub (${{ secrets.NAME }}).
+  Docker       Tool that packages an app into a self-contained "image".
+  image        The packaged app (backend image, frontend image).
+  container    A running instance of an image.
+  Docker Hub   Website that stores images (yazoo555/docker-recepie).
+  EC2          Amazon's virtual servers (where your app runs).
+  Elastic IP   A fixed public IP for your server (survives restarts).
+  deploy       The act of putting the new version of your app online.
+  artifact     A file produced by a workflow run.
+  YAML         The simple text format workflow files are written in.
+
+================================================================================
+10) THE LOCAL SCRIPTS (how they relate to the CI/CD)
+================================================================================
+
+These are in the repo root and let you do the same things from YOUR machine:
+
+  ./deploy.sh
+      The same job the GitHub deploy workflow runs. It builds the images,
+      pushes them to Docker Hub, and provisions/deploys to AWS EC2.
+      Idempotent = safe to re-run (reuses the key, security group, instance,
+      and Elastic IP; the public IP never changes).
+      Useful options:
+        ./deploy.sh --help
+        ./deploy.sh --build-only     # images only, no AWS
+        ./deploy.sh --deploy-only    # deploy only, images must be on Hub
+
+  ./destroy.sh
+      Removes everything deploy.sh created (instance, Elastic IP, key pair,
+      security group). Run it when you are done so AWS stops billing you:
+        ./destroy.sh --dry-run       # preview only
+        ./destroy.sh --yes           # actually delete
+
+  ./set-aws-creds.sh
+      For training labs (VOC Labs): after every lab restart, run this and
+      paste the fresh AWS credentials block from the lab panel, then Ctrl-D.
+      Needed BEFORE ./deploy.sh if your account issues temporary credentials.
+
+  ./set-gh-secrets.sh
+      Same idea, but for GITHUB: stores your current AWS keys + session token
+      and Docker Hub username/token as GitHub Actions secrets, so the Deploy
+      workflow on GitHub uses your CURRENT credentials. Edit ./gh-secrets.env
+      (gitignored, never committed) and run it after every login:
+        cp gh-secrets.env.example gh-secrets.env   # once
+        # edit gh-secrets.env ...
+        ./set-gh-secrets.sh
+      Interactive paste also works (no file needed):  ./set-gh-secrets.sh
+
+  Useme.txt
+      The full manual for the scripts above — read it if you go deeper.
+
+  Relationship: the GitHub workflow simply runs ./deploy.sh inside a GitHub
+  runner. So "CI/CD via GitHub" and "./deploy.sh locally" do the SAME thing —
+  one is automatic and remote, the other is manual and local.
+
+================================================================================
+11) QUICK REFERENCE: THE WHOLE PROCESS IN ONE PAGE
+================================================================================
+
+  YOU DO:                                   THE ROBOT DOES:
+  ------------------------------------------  ----------------------------------
+  1. Edit code, git add/commit                 (nothing yet)
+  2. git push origin firstbranch             CI workflow starts: builds the
+                                             two Docker images (≈30 s).
+  3. (CI green)                                You are ready to ship.
+  4. gh workflow run "Deploy MERN to EC2"
+     --ref firstbranch                       CD workflow starts:
+     (or merge into main)                    - checks out code
+                                             - logs into AWS + Docker Hub
+                                             - builds + pushes images
+                                             - provisions EC2 server
+                                             - starts MongoDB+backend+frontend
+                                             - prints public URLs
+  5. Open the frontend URL in your browser → your app is live!
+  6. Done testing? ./destroy.sh --yes        removes the server (stop paying)
+
+================================================================================
+12) WHAT TO DO NEXT (checklist)
+================================================================================
+
+  [ ] Run RECIPE A: set the 5 secrets (gh secret set ...) — or just run
+      ./set-gh-secrets.sh (edit gh-secrets.env first).
+  [ ] gh secret list   → confirm all 5 are stored.
+  [ ] After EVERY lab login: update gh-secrets.env and re-run ./set-gh-secrets.sh.
+  [ ] Run RECIPE C: gh workflow run "Deploy MERN to EC2" --ref firstbranch
+      and watch it succeed end-to-end (first deploy ≈ 5–10 min).
+  [ ] Open the frontend URL printed in the run log. Add an expense!
+  [ ] Make a small change, push it (RECIPE B), see CI turn green.
+  [ ] Optional: open a PR from firstbranch into main and merge → see
+      automatic deploy on main (RECIPE D).
+  [ ] When you are done with the server for good: ./destroy.sh --yes
+  [ ] Optional homework: read Useme.txt and the two YAML files again —
+      now they will make much more sense.
+
+================================================================================
+ Done! You now know: what CI/CD is, what is in your repo, and every gh
+ command you need. Bookmark section 5 (cheat sheet) and section 6 (recipes).
+================================================================================

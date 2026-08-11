@@ -3,13 +3,15 @@
 ================================================================================
 
 This repository contains a MERN (MongoDB, Express, React, Node.js) expense
-tracker and three automation scripts that deploy it to AWS EC2:
+tracker and four automation scripts that deploy it to AWS EC2:
 
   deploy.sh          One-command deployment to AWS EC2 (build, push, launch,
                      provision, health-check)
   destroy.sh         Safe teardown of the AWS resources created by deploy.sh
   set-aws-creds.sh   Paste fresh AWS lab credentials after every lab restart
                      (needed for training labs such as VOC Labs)
+  set-gh-secrets.sh  Store your CURRENT AWS + Docker Hub credentials as GitHub
+                     Actions secrets (for the CI/CD workflow) — see section 3b
 
 Quick start (training-lab workflow — do this after EVERY lab start):
 
@@ -124,6 +126,28 @@ Then run the deployment:
 
 
 --------------------------------------------------------------------------------
+3b) GITHUB SECRETS: ./set-gh-secrets.sh  (for CI/CD via GitHub Actions)
+--------------------------------------------------------------------------------
+
+The GitHub Deploy workflow (.github/workflows/deploy.yml) needs your current
+credentials stored as repository SECRETS. Because your lab AWS credentials are
+temporary (they include a session token that changes every login), re-sync
+them after every lab start:
+
+  cp gh-secrets.env.example gh-secrets.env     # once — file is gitignored
+  # ...edit gh-secrets.env with your current values...
+  ./set-gh-secrets.sh
+
+It sets all 5 secrets: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY,
+AWS_SESSION_TOKEN, DOCKERHUB_USERNAME, DOCKERHUB_TOKEN.
+You can also run it with no arguments and paste the [default] block when
+prompted (Ctrl-D to finish) — same feel as ./set-aws-creds.sh.
+
+Verify:
+  gh secret list
+
+
+--------------------------------------------------------------------------------
 4) TEARDOWN: ./destroy.sh
 --------------------------------------------------------------------------------
 
@@ -176,7 +200,8 @@ E. Health check fails after deploy (backend/frontend not HTTP 200)
 F. GitHub Actions (CI/CD)
    The workflow .github/workflows/deploy.yml runs ./deploy.sh automatically on
    pushes to main. It needs repo secrets: AWS_ACCESS_KEY_ID,
-   AWS_SECRET_ACCESS_KEY, DOCKERHUB_USERNAME, DOCKERHUB_TOKEN.
+   AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN, DOCKERHUB_USERNAME,
+   DOCKERHUB_TOKEN. Set/refresh them with ./set-gh-secrets.sh (section 3b).
 
 
 --------------------------------------------------------------------------------

@@ -6,8 +6,11 @@
 # re-runs are safe and the public IP stays the same.
 #
 # Required repository secrets:
-#   AWS_ACCESS_KEY_ID      AWS IAM access key (EC2 + VPC permissions)
+#   AWS_ACCESS_KEY_ID      AWS access key (EC2 + VPC permissions)
 #   AWS_SECRET_ACCESS_KEY  matching secret
+#   AWS_SESSION_TOKEN      session token — REQUIRED for temporary lab credentials
+#                          (always present in the [default] block). Set with
+#                          ./set-gh-secrets.sh, which re-syncs all secrets.
 #   DOCKERHUB_USERNAME     Docker Hub username
 #   DOCKERHUB_TOKEN        Docker Hub access token (Hub -> Account Settings -> Security)
 #
@@ -48,6 +51,7 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
           aws-region: us-east-1
           # ---- OIDC alternative (recommended for production) ----
           # role-to-assume: arn:aws:iam::<ACCOUNT_ID>:role/github-actions-ec2
