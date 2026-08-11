@@ -1,0 +1,845 @@
+================================================================================
+ details.txt — CI/CD & GitHub Actions explained from ZERO (for beginners)
+ Project: Yazoo555/mern-stack   (MERN Expense Tracker)
+================================================================================
+
+This file is a complete, beginner-friendly course about the CI/CD pipeline in
+this repository. It answers, in plain language:
+
+  * What CI/CD actually means (no jargon)
+  * The basic fundamentals you need first: git, GitHub, YAML, Docker
+  * What GitHub Actions is, and every piece of it
+  * Line-by-line explanation of YOUR workflow file: .github/workflows/dpy.yml
+  * Line-by-line explanation of YOUR shell script: print-vars-and-secrets.sh
+  * WHEN and WHY the pipeline runs (its triggers)
+  * How git, GitHub and the runner machine all connect together
+  * How to write your own workflow from scratch (with a practice example)
+  * How to watch it with the gh command-line tool
+  * The bigger picture: how a REAL deploy (to AWS EC2) would be connected
+  * Common mistakes and a glossary of every word used
+
+Read it top to bottom once. Then keep it open and copy-paste the commands.
+Every section is independent, so you can jump to whatever confuses you.
+
+================================================================================
+PART 1 — THE FUNDAMENTALS (things you must know before CI/CD)
+================================================================================
+
+--------------------------------------------------------------------------------
+1.1 WHAT IS GIT? (the time machine for your code)
+--------------------------------------------------------------------------------
+
+Git is a tool that tracks every version of your code. Every time you save a
+"snapshot" (a commit), git remembers exactly what changed, who changed it,
+and when. You can go back to any snapshot, compare versions, or undo mistakes.
+
+Key git vocabulary (you will use these every single day):
+
+  repository (repo)   The folder of your project that git is tracking.
+                      Yours is "mern-stack". It has a remote copy on GitHub.
+
+  working tree        Your actual files on disk, right now.
+
+  staging area        The "parking lot" between your files and a commit.
+                      You pick which changes to include:  git add <file>
+
+  commit              A saved snapshot of your chosen changes, with a message.
+                      git commit -m "what I did"
+
+  branch              A separate copy of the history. You can experiment on a
+                      branch without touching the main code. You are on
+                      "firstbranch". "main" is the default/production branch.
+
+  remote              The copy of your repo that lives on GitHub, named
+                      "origin".  git remote -v  shows: origin git@github.com:Yazoo555/mern-stack.git
+
+  push                Send your local commits up to GitHub.
+  pull                Download commits from GitHub down to your machine.
+  merge               Combine one branch's changes into another (e.g. into main).
+  pull request (PR)   A formal proposal: "please merge my branch into main".
+
+The 3 most important commands and what they do:
+
+  git status          "What is different right now?" Shows changed/untracked files.
+  git diff            "Show me the exact lines I changed."
+  git log --oneline   "Show me the history of commits, one line each."
+
+The everyday cycle (memorize this):
+
+  git add .                       # stage all changes
+  git commit -m "my message"      # save a snapshot
+  git push origin firstbranch     # send it to GitHub
+
+WHY THIS MATTERS FOR CI/CD: GitHub Actions is *triggered by git events*.
+When you push, GitHub notices the push and can automatically run your
+pipeline. No push = no pipeline run (for push triggers).
+
+--------------------------------------------------------------------------------
+1.2 WHAT IS GITHUB? (the social network for code)
+--------------------------------------------------------------------------------
+
+GitHub is a website that hosts git repositories online (yours is at
+github.com/Yazoo555/mern-stack). It adds superpowers on top of plain git:
+
+  * a web UI to browse code, branches, commits, pull requests
+  * collaboration (issues, PRs, reviews)
+  * SECRETS and VARIABLES storage (settings for your automation)
+  * GitHub Actions — the robot that runs your CI/CD pipelines for free
+
+"gh" is GitHub's command-line tool. It lets you control GitHub (including
+Actions) from the terminal. It is already installed and logged in as
+Yazoo555 on your machine.
+
+--------------------------------------------------------------------------------
+1.3 WHAT IS YAML? (the language workflows are written in)
+--------------------------------------------------------------------------------
+
+GitHub Actions workflows are YAML files. YAML is just a very simple text
+format for writing data. You need to understand only 3 rules:
+
+  RULE 1 — key: value   (a colon + a space)
+      name: Basic Jobs Demo
+
+  RULE 2 — lists use a dash + space, indented under their parent
+      branches:
+        - main
+        - firstbranch
+
+  RULE 3 — INDENTATION MEANS NESTING. Everything that belongs to a parent
+      must be indented with spaces (never tabs!). 2 spaces is the convention.
+
+Example — read this out loud as a sentence:
+
+      on:                      # the trigger section
+        push:                  # when a push happens...
+          branches: [main]     # ...but only on the main branch
+
+  "On the event 'push' — but only when the branch is main — do something."
+
+A quick YAML cheat:
+  #      starts a comment (ignored)
+  key: value            a single value
+  key:                  a nested section
+    child: value        child belongs to key
+  - item                one item in a list
+  [a, b]                a short list written inline
+  "text"                quotes around text if it contains special chars
+
+Note: on: is a special key in YAML, so GitHub Actions lets you write it as
+the word "on" — the parser understands it. Nothing else special about it.
+
+--------------------------------------------------------------------------------
+1.4 WHAT IS DOCKER? (the shipping box for apps)
+--------------------------------------------------------------------------------
+
+Docker packages an app + everything it needs into one "image" (like a
+shipping container). A "container" is a running copy of an image.
+
+  image       the blueprint/package      (e.g. mongo:latest)
+  container   a running instance of it   (e.g. a running MongoDB)
+
+Why CI/CD loves Docker: a container always runs the same everywhere. So the
+pipeline can build, test, and even run your app in a clean box, and then
+ship that exact box to a server.
+
+Docker Hub is a website that stores images (like an app store for containers).
+Your project pushes its images to  yazoo555/docker-recepie.
+
+Your repo has 3 compose files that describe the whole app as containers:
+  docker-compose.yml         for local development (builds from source)
+  docker-compose.prod.yml    for production on EC2 (pulls from Docker Hub)
+  (deploy.sh generates the real prod file with your server's IP baked in)
+
+--------------------------------------------------------------------------------
+1.5 WHAT IS AWS EC2? (a rented computer in the cloud)
+--------------------------------------------------------------------------------
+
+EC2 is Amazon's "rent a virtual computer" service. Your app, when deployed,
+runs on a small EC2 instance (t2.micro). deploy.sh (in this repo) creates or
+reuses that server, installs Docker on it, pulls your images from Docker Hub,
+and starts MongoDB + backend + frontend on it. Your server gets a stable
+public IP (an "Elastic IP") so the URL never changes.
+
+  --------------------------------------------------------------------------
+  RECAP: the 5 fundamentals in one sentence each:
+  - git = version control (your code's time machine)
+  - GitHub = where your repo lives online + the robot (Actions)
+  - YAML = the text format workflows are written in
+  - Docker = shipping boxes for apps (images & containers)
+  - EC2 = Amazon's rented server where the app finally runs
+  --------------------------------------------------------------------------
+
+================================================================================
+PART 2 — WHAT IS CI/CD? (the whole point of all this)
+================================================================================
+
+CI and CD are two ideas that automate the boring, repetitive work of shipping
+software. "GitHub Actions" is the tool you use to build them.
+
+--------------------------------------------------------------------------------
+2.1 CI — CONTINUOUS INTEGRATION ("check it")
+--------------------------------------------------------------------------------
+
+Every time code changes (a push, a pull request), a robot:
+
+  1. downloads your latest code onto a fresh machine
+  2. tries to BUILD it (e.g. docker build, npm install + build)
+  3. runs TESTS and checks (e.g. npm test, lint)
+  4. reports: green (all good) or red (broken) — usually in minutes
+
+Why it matters: without CI, you might not discover your change broke
+something until days later. With CI, you know within minutes, on every single
+change. It is your code's quality gate.
+
+--------------------------------------------------------------------------------
+2.2 CD — CONTINUOUS DELIVERY / DEPLOYMENT ("ship it")
+--------------------------------------------------------------------------------
+
+Once the code passes CI, CD takes over:
+
+  Continuous Delivery:   the new version is automatically packaged and made
+                         ready to deploy (e.g. Docker images pushed to Hub).
+  Continuous Deployment: the packaged version is automatically put on a real
+                         server (e.g. EC2) and made live for users.
+
+Your mental model:
+
+      YOU push code  →  CI checks it  →  CD ships it  →  Users see it
+
+  --------------------------------------------------------------------------
+  Restaurant analogy (easy to remember):
+  - You write a recipe (code).
+  - The quality check taster (CI) says "ok" or "this is burnt".
+  - The delivery van (CD) takes the approved dish to customers.
+  --------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+2.3 CI/CD IN THIS REPO, RIGHT NOW
+--------------------------------------------------------------------------------
+
+Currently the repo has ONE active workflow (in .github/workflows/):
+
+  dpy.yml  →  workflow name "Basic Jobs Demo"
+
+This is a DEMO pipeline. It does NOT build or deploy your app. It exists to
+teach the mechanics: how jobs run, how to pass variables and secrets, how to
+run a script, and how to pull a Docker image. It is the "hello world" of
+GitHub Actions.
+
+(GitHub still shows old runs of two other workflows — "CI - Build images"
+and "Deploy MERN to EC2" — from earlier commits, but their files are no
+longer in the repo, so they don't run anymore. The full deploy pipeline for
+this project lives in ./deploy.sh and is documented in ghguide.txt + Useme.txt.)
+
+================================================================================
+PART 3 — GITHUB ACTIONS, PIECE BY PIECE (the machine you're learning)
+================================================================================
+
+GitHub Actions is: "when event X happens on GitHub, run Y commands on a
+fresh rented computer, and show me the output."
+
+Everything is defined in text files (workflows) inside the folder:
+
+  .github/workflows/
+
+GitHub watches that folder. When you push a new/changed workflow file, GitHub
+registers it (usually within seconds).
+
+A workflow has 5 kinds of pieces. Learn these 5 words — they are 90% of
+understanding any pipeline file:
+
+  1. WORKFLOW  = the whole YAML file = one automation ("Basic Jobs Demo")
+  2. EVENT     = the thing that triggers it (a push, a manual click, a PR)
+  3. JOB       = a big phase, like "build" or "deploy". Jobs run in PARALLEL
+                unless you chain them with "needs:". Each job gets its own
+                fresh machine!
+  4. STEP      = one command inside a job, run top-to-bottom. If a step
+                fails, the job stops (by default) and the run turns red.
+  5. RUNNER    = the actual rented computer that executes the job.
+                runs-on: ubuntu-latest means "fresh Ubuntu virtual machine".
+
+Also important:
+
+  6. ACTION    = a reusable piece of someone else's steps you can drop in
+                with "uses:". e.g. actions/checkout@v4 downloads your repo
+                onto the runner. The "@v4" is a version tag.
+  7. EXPRESSION = ${{ ... }} — a way to inject dynamic values into the file,
+                e.g. ${{ secrets.MY_SECRET }} or ${{ vars.MY_VARIABLE }}
+                or ${{ github.ref }} (the branch that triggered the run).
+
+The lifecycle of ONE run:
+
+  1. An event happens (e.g. git push to main, or you click "Run workflow").
+  2. GitHub's Actions service reads the matching workflow file(s).
+  3. It provisions a fresh runner (a brand-new virtual machine).
+  4. It executes your jobs. Job steps run one after another.
+  5. Logs stream to the Actions tab in real time.
+  6. Final status: success (green ✓) or failure (red ✗).
+  7. The runner machine is destroyed afterward (it never persists!).
+
+--------------------------------------------------------------------------------
+3.1 TRIGGERS (the "on:" section) — when does the pipeline run?
+--------------------------------------------------------------------------------
+
+The "on:" key lists the events that start the workflow. The ones you'll
+meet most:
+
+  on:
+    push:                          # a push happened
+      branches: [main]             # ...but ONLY to these branches
+                                   # (no branches = any push anywhere)
+
+    pull_request:                  # someone opened/updated a PR
+      branches: [main]
+
+    workflow_dispatch:             # a HUMAN starts it manually
+                                   # (button in the Actions tab, or gh CLI)
+
+    schedule:                      # on a cron timer (like an alarm clock)
+      - cron: "0 2 * * *"          # every day at 02:00 UTC
+
+    workflow_run:                  # after ANOTHER workflow finishes
+      workflows: ["CI - Build images"]
+      types: [completed]
+
+Common gotcha: if a workflow's file is on a branch but NOT on the default
+branch ("main"), it will not appear in the Actions tab or in
+`gh workflow list`. Pushing the file to main (or merging a PR) registers it.
+
+================================================================================
+PART 4 — YOUR WORKFLOW FILE, LINE BY LINE
+================================================================================
+
+Here is the ENTIRE file .github/workflows/dpy.yml. Read it first, then read
+the explanation below it — every line is explained.
+
+--------------------------------------------------------------------------------
+4.1 THE RAW FILE (copy of what's in your repo)
+--------------------------------------------------------------------------------
+
+    name: Basic Jobs Demo
+
+    on:
+      workflow_dispatch:
+      push:
+        branches: [main]
+
+    jobs:
+      echo-vars-and-secrets:
+        name: 1 - Echo Variables and Secrets
+        runs-on: ubuntu-latest
+        environment: development
+
+        env:
+          MY_VARIABLE: ${{ vars.MY_VARIABLE }}
+          MY_SECRET: ${{ secrets.MY_SECRET }}
+
+        steps:
+          - name: Echo repository variable
+            run: echo "MY_VARIABLE=$MY_VARIABLE"
+
+          - name: Echo repository secret (value is masked as *** in the logs)
+            run: echo "MY_SECRET=$MY_SECRET"
+
+          - name: Echo built-in GITHUB_TOKEN secret (always available, also masked)
+            run: echo "GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }}"
+
+      run-shell-script:
+        name: 2 - Use a Shell Script with Vars and Secrets
+        runs-on: ubuntu-latest
+        needs: echo-vars-and-secrets
+        environment: development
+
+        env:
+          MY_VARIABLE: ${{ vars.MY_VARIABLE }}
+          MY_SECRET: ${{ secrets.MY_SECRET }}
+
+        steps:
+          - name: Checkout repository
+            uses: actions/checkout@v4
+
+          - name: Make script executable
+            run: chmod +x .github/workflows/print-vars-and-secrets.sh
+
+          - name: Run script
+            run: ./.github/workflows/print-vars-and-secrets.sh
+
+      pull-mongo-image:
+        name: 3 - Pull MongoDB
+        runs-on: ubuntu-latest
+        needs: run-shell-script
+
+        steps:
+          - name: Pull MongoDB Docker image
+            run: docker pull mongo:latest
+
+--------------------------------------------------------------------------------
+4.2 EXPLANATION OF EVERY LINE
+--------------------------------------------------------------------------------
+
+  name: Basic Jobs Demo
+  → Just a friendly label. This is what you see in the Actions tab and in
+    `gh workflow list`. It does NOT have to match the file name.
+
+  on:
+    workflow_dispatch:
+  → Trigger #1: a human can start this anytime (button "Run workflow" in the
+    Actions tab, or:  gh workflow run "Basic Jobs Demo" --ref firstbranch).
+
+    push:
+      branches: [main]
+  → Trigger #2: whenever code is pushed to the main branch.
+    NOTE THE GOTCHA: pushes to YOUR branch "firstbranch" will NOT trigger
+    this workflow — only main does. That's why you used the manual trigger.
+
+  jobs:
+  → Everything below is the list of jobs. Each job runs on its OWN fresh
+    machine, in parallel by default — but here they are chained with "needs".
+
+  echo-vars-and-secrets:
+  → The internal key (ID) of job 1. Only used to refer to the job (e.g. in
+    "needs:"). This name never appears in the UI.
+
+    name: 1 - Echo Variables and Secrets
+  → The human-friendly name of job 1, shown in the UI. The "1 -" is just
+    cosmetic numbering (there's no automatic numbering).
+
+    runs-on: ubuntu-latest
+  → The runner: a fresh Ubuntu 24.04 virtual machine, provisioned by GitHub.
+    Other common options: ubuntu-22.04, windows-latest, macos-latest.
+
+    environment: development
+  → Job uses the GitHub Environment named "development". Environments are
+    like scoped buckets: they can hold their OWN secrets/variables, and can
+    have protection rules (e.g. "require approval before using production
+    secrets"). Here it's mostly used to demonstrate the concept.    Secrets referenced (${{ secrets.MY_SECRET }}) are looked up: environment first,
+    then organization, then repository (an environment-level secret overrides the
+    same name at org or repo level).
+
+    env:
+      MY_VARIABLE: ${{ vars.MY_VARIABLE }}
+      MY_SECRET: ${{ secrets.MY_SECRET }}
+  → Defines environment variables FOR THIS JOB (each job needs its own env
+    block). The ${{ ... }} syntax pulls values from GitHub's storage:
+      vars.MY_VARIABLE   → a repo VARIABLE (plain, visible text)
+      secrets.MY_SECRET  → a repo SECRET (encrypted, hidden)
+    After this, every step in the job can use $MY_VARIABLE / $MY_SECRET as
+    normal shell variables.
+
+    steps:
+  → The ordered list of commands for this job. Stop on first failure.
+
+      - name: Echo repository variable
+        run: echo "MY_VARIABLE=$MY_VARIABLE"
+  → Step 1: prints the value of the variable. In the log you will see:
+        MY_VARIABLE=hello-from-github
+
+      - name: Echo repository secret (value is masked as *** in the logs)
+        run: echo "MY_SECRET=$MY_SECRET"
+  → Step 2: prints the secret. GitHub automatically MASKED the real value:
+        MY_SECRET=***
+    THIS IS A FEATURE, NOT A BUG. Secrets are redacted in logs so they can
+    never leak. If you ever see a secret's real value in a log, that's a
+    security problem.
+
+      - name: Echo built-in GITHUB_TOKEN secret (always available, also masked)
+        run: echo "GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }}"
+  → Step 3: GitHub auto-creates a temporary token for every run, called
+    GITHUB_TOKEN. It lets your workflow talk to the GitHub API (e.g. push a
+    release, comment on a PR) without any setup. It's also masked as ***.
+
+  ----------------------------------------------------------------------------
+  JOB 1 result (from your real run #31474167125):
+       MY_VARIABLE=hello-from-github
+       MY_SECRET=***
+       GITHUB_TOKEN=***
+  ----------------------------------------------------------------------------
+
+  run-shell-script:
+  → Job 2.
+
+    needs: echo-vars-and-secrets
+  → THE CHAIN. "Job 2 will only start after job 1 finishes successfully."
+    If job 1 fails, job 2 (and everything that needs it) is skipped. This is
+    how you build a pipeline: 1 → 2 → 3.
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+  → Critical step! By default the runner is EMPTY — it doesn't have your
+    code. actions/checkout@v4 is an "action" (a pre-built reusable step)
+    that downloads your repo onto the runner. After this, your files exist
+    on the machine and the next steps can use them.
+    (The @v4 is a version. "actions/checkout" is published by GitHub itself.)
+
+      - name: Make script executable
+        run: chmod +x .github/workflows/print-vars-and-secrets.sh
+  → Linux only runs files that have the "execute" permission. checkout
+    preserves git's file modes; chmod +x adds the permission so we can run
+    the script in the next step.
+
+      - name: Run script
+        run: ./.github/workflows/print-vars-and-secrets.sh  → Runs your actual shell script (see Part 5). The env variables defined at
+    the job level (MY_VARIABLE / MY_SECRET) are automatically available to the
+    script: job-level env vars are passed into EVERY step's shell, so the
+    script can simply read $MY_VARIABLE and $MY_SECRET.
+
+  ----------------------------------------------------------------------------
+  JOB 2 result (from your real run):
+       Printing variables and secrets...
+       MY_VARIABLE=hello-from-github
+       MY_SECRET=***
+  ----------------------------------------------------------------------------
+
+  pull-mongo-image:
+  → Job 3.
+
+    needs: run-shell-script
+  → Starts only after job 2 succeeded.
+
+    steps:
+      - name: Pull MongoDB Docker image
+        run: docker pull mongo:latest
+  → Downloads the MongoDB Docker image from Docker Hub onto the runner.
+    Docker is pre-installed on GitHub's ubuntu runners, so this just works.
+    Real output line from your run:
+       Status: Downloaded newer image for mongo:latest
+    (This simulates what a real CD pipeline does: fetch the app images. Note
+    this only pulls the image — it never runs or deploys it.)
+
+  ----------------------------------------------------------------------------
+  THE WHOLE PIPELINE, ONE SENTENCE:
+  On a manual trigger or a push to main, GitHub starts a fresh Ubuntu
+  machine → job 1 prints the variable & secret → job 2 checks out the code
+  and runs print-vars-and-secrets.sh → job 3 pulls the mongo image.
+  All 3 succeeded in ~19 seconds in your real run.
+  ----------------------------------------------------------------------------
+
+================================================================================
+PART 5 — YOUR SHELL SCRIPT, LINE BY LINE
+================================================================================
+
+File: .github/workflows/print-vars-and-secrets.sh
+
+    #!/bin/bash
+
+    echo "Printing variables and secrets..."
+
+    echo "MY_VARIABLE=$MY_VARIABLE"
+    echo "MY_SECRET=$MY_SECRET"
+
+--------------------------------------------------------------------------------
+Line-by-line:
+
+  #!/bin/bash
+  → The "shebang". It tells Linux: "run this file with the bash program".
+    This is why we chmod +x the file before running it.
+
+  echo "Printing variables and secrets..."
+  → Prints a plain message to the console (the run log).
+
+  echo "MY_VARIABLE=$MY_VARIABLE"
+  → $MY_VARIABLE is a SHELL VARIABLE. Where does its value come from? From
+    the job's env block in dpy.yml:
+        env:
+          MY_VARIABLE: ${{ vars.MY_VARIABLE }}
+    So the chain is:
+        GitHub stores MY_VARIABLE (a repo variable) 
+          → dpy.yml reads it with ${{ vars.MY_VARIABLE }} 
+            → sets a shell env var 
+              → the script prints it.
+    This is the standard pattern: the workflow injects config into the
+    script via environment variables. NEVER hardcode secrets in scripts.
+
+  echo "MY_SECRET=$MY_SECRET"
+  → Same chain for the secret. GitHub masks the real value in the log, so
+    the output is MY_SECRET=*** — but inside the runner the REAL value was
+    actually available to the script. (That's how you'd e.g. pass a real
+    Docker Hub token to a deploy script without exposing it in logs.)
+
+WHY SPLIT WORK INTO A SCRIPT AT ALL?
+  Workflows with long `run:` commands get hard to read, and you can't easily
+  run the same logic locally. A script file can be tested on your machine
+  (./print-vars-and-secrets.sh) AND reused by the workflow. Same logic,
+  one source of truth. This repo does the same thing with deploy.sh.
+
+================================================================================
+PART 6 — SECRETS AND VARIABLES (your credentials cupboard)
+================================================================================
+
+GitHub lets you store values that workflows can use, in two flavors:
+
+  VARIABLES (gh variable ...)   → plain text, anyone with repo access can
+                                  read them. For non-secret config like a
+                                  username or a URL.
+
+  SECRETS (gh secret ...)       → encrypted. After you set one, GitHub never
+                                  shows its value again (not even to you).
+                                  For passwords, tokens, API keys.
+
+In the workflow you read them like this:
+
+  ${{ vars.MY_VARIABLE }}       ← repository VARIABLE
+  ${{ secrets.MY_SECRET }}      ← repository SECRET
+  ${{ vars.MY_SECRET }}         ← WRONG! Variables and secrets use different
+                                  keywords. Mixing them up is the #1
+                                  beginner mistake: it silently becomes
+                                  empty/undefined.
+
+How to manage them (from the terminal, already logged in as Yazoo555):
+
+  gh variable set MY_VARIABLE --body "hello"     # create/update a variable
+  gh variable list                               # list variables
+  gh secret set MY_SECRET                        # create a secret (prompts)
+  gh secret set MY_SECRET --body "value"         # non-interactive version
+  gh secret list                                 # list secrets (names only)
+  gh secret delete MY_SECRET                     # remove a secret
+
+Where they live (all are on your repo right now):
+  MY_VARIABLE = hello-from-github        ← set earlier, seen in job 1's log
+  MY_SECRET   = (hidden)                 ← set earlier, masked in the log
+  plus the 5 deploy secrets: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY,
+  AWS_SESSION_TOKEN, DOCKERHUB_USERNAME, DOCKERHUB_TOKEN.
+
+IMPORTANT security rules:
+  1. NEVER write a real secret directly into a workflow file or a script.
+  2. Never commit secret values to git (they'd live in history forever).
+  3. Use gh-secrets.env (gitignored) + ./set-gh-secrets.sh for the deploy
+     credentials — see ghguide.txt section 7.
+
+================================================================================
+PART 7 — HOW IT ALL CONNECTS (the full chain, start to finish)
+================================================================================
+
+Here is the complete journey of one pipeline run, using YOUR real run
+#31474167125 (the manual trigger you did):
+
+  STEP 1 — YOU, in the terminal:
+      gh workflow run "Basic Jobs Demo" --ref firstbranch
+  → This sends "start the workflow called 'Basic Jobs Demo' using the code
+    on branch firstbranch" to the GitHub API. (The --ref is required for
+    manual triggers; default is the default branch.)
+
+  STEP 2 — GITHUB:
+      The Actions service receives the event: workflow_dispatch.
+      It finds the file .github/workflows/dpy.yml, sees that
+      workflow_dispatch is listed under "on:", and starts the run.
+      (If it weren't listed there, gh would error with:
+       "workflow does not have 'workflow_dispatch' trigger")
+
+  STEP 3 — RUNNER PROVISIONING:
+      GitHub boots a brand-new virtual machine (Ubuntu 24.04, because of
+      runs-on: ubuntu-latest). Docker is pre-installed on it.
+
+  STEP 4 — JOB 1 runs its steps, one by one:
+      Echo repository variable  → MY_VARIABLE=hello-from-github
+      Echo repository secret    → MY_SECRET=***
+      Echo GITHUB_TOKEN         → GITHUB_TOKEN=***
+
+  STEP 5 — JOB 2 starts (because needs: echo-vars-and-secrets was green):
+      Checkout repository       → downloads your code (actions/checkout@v4)
+      chmod +x script           → makes the script executable
+      Run script                → prints the same values via the script
+
+  STEP 6 — JOB 3 starts (needs: run-shell-script):
+      docker pull mongo:latest  → pulls the MongoDB image (~13 seconds)
+
+  STEP 7 — RESULT:
+      All jobs ✓ green. Run status: success.
+      The runner machine is destroyed. The logs stay in the Actions tab.
+
+WATCHING IT HAPPEN (the commands you now know):
+
+  gh run list                              # recent runs of all workflows
+  gh run list --workflow dpy.yml           # only your demo workflow's runs
+  gh run view <RUN_ID>                     # summary of one run
+  gh run view <RUN_ID> --log               # full log, every step
+  gh run view <RUN_ID> --log-failed        # only the failing step's log
+  gh run watch                             # follow the latest run live
+  gh run watch <RUN_ID>                    # follow a specific run
+  gh run rerun <RUN_ID>                    # retry a run
+  gh run cancel <RUN_ID>                   # stop a running run
+
+  And the visual option: open https://github.com/Yazoo555/mern-stack/actions
+  in your browser to watch the same thing with pretty colors.
+
+================================================================================
+PART 8 — HOW TO WRITE YOUR OWN WORKFLOW (from scratch, beginner-friendly)
+================================================================================
+
+You don't need to memorize GitHub Actions. You need a template and the
+confidence to fill it in. Here is the recipe:
+
+  STEP A — create the folder and file:
+      mkdir -p .github/workflows
+      (create .github/workflows/my-first-workflow.yml)
+
+  STEP B — start with the skeleton:
+
+      name: My First Workflow
+
+      on:
+        workflow_dispatch:        # allow manual triggering
+        push:                     # and trigger on pushes to main
+          branches: [main]
+
+      jobs:
+        hello:
+          runs-on: ubuntu-latest
+          steps:
+            - name: Say hello
+              run: echo "Hello from GitHub Actions!"
+
+  STEP C — commit and push it to main (that registers it with GitHub):
+      git add .github/workflows/my-first-workflow.yml
+      git commit -m "add my first workflow"
+      git push origin main
+
+  STEP D — run it and watch:
+      gh workflow run "My First Workflow"
+      gh run watch
+
+  STEP E — iterate. Add pieces one at a time:
+      - actions/checkout@v4       to get your code
+      - env: / ${{ vars.X }}      to pass config
+      - needs:                    to chain jobs
+      - a secret                  to use a credential
+
+GOLDEN RULES for writing workflows:
+  1. Indentation is REAL. Use 2 spaces, never tabs. A wrong indent = a
+     YAML error = "invalid workflow file" in red.
+  2. Every step gets a clear "name:" — your future self will thank you.
+  3. Steps run top to bottom; a failing step fails the job (by default).
+  4. Each job = a fresh machine. If job B needs job A's result, use
+     needs: A (and maybe upload/download artifacts — advanced).
+  5. Put real commands in a script file and call it from the workflow —
+     easier to test locally, easier to read.
+  6. Validate before pushing: use a YAML linter, or just push and read the
+     error — GitHub tells you the exact line that failed.
+
+PRACTICE CHALLENGE (try it!): modify dpy.yml to add a 4th job that echoes
+the current date. Hint: run: date. Then chain it with needs: pull-mongo-image
+and trigger it manually. Watch it run. You've now written CI yourself.
+
+================================================================================
+PART 9 — THE BIGGER PICTURE: FROM DEMO TO REAL DEPLOY
+================================================================================
+
+dpy.yml is a demo. What does a REAL CI/CD pipeline for this project look
+like? You already have all the pieces on disk — here's how they'd connect:
+
+  CI (build & test every push):
+      on: push
+      jobs:
+        build:
+          - actions/checkout@v4
+          - docker build backend  → push to Docker Hub
+          - docker build frontend → push to Docker Hub
+
+  CD (deploy to EC2):
+      on: workflow_dispatch / push to main
+      jobs:
+        deploy:
+          - actions/checkout@v4
+          - configure AWS credentials from secrets
+            (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN)
+          - docker login from secrets
+            (DOCKERHUB_USERNAME, DOCKERHUB_TOKEN)
+          - run: ./deploy.sh        ← the script that does ALL the work:
+                                        builds+pushes images, creates/reuses
+                                        the EC2 server, installs Docker,
+                                        pulls images, starts MongoDB+backend+
+                                        frontend, health-checks, prints URLs
+
+So the pattern is always:  checkout → inject secrets as env vars → run a
+script. The workflow is the "glue"; the script is the "muscle".
+
+In this repo:
+  * ./deploy.sh     — the muscle (idempotent: safe to re-run, reuses server)
+  * ./destroy.sh    — tears the server down when you're done
+  * ./set-gh-secrets.sh — pushes your current AWS/DockerHub credentials to
+                          GitHub as secrets (re-run after every lab login,
+                          because lab credentials are temporary)
+  * ghguide.txt / Useme.txt — the full manuals for all of this
+
+Local vs GitHub: running ./deploy.sh on YOUR machine and letting the
+workflow run it on a GitHub runner do the SAME thing — one is manual and
+local, the other automatic and remote. Same script, same result.
+
+================================================================================
+PART 10 — THE 10 MOST COMMON BEGINNER MISTAKES
+================================================================================
+
+  1. Pushing to a branch but the trigger says branches: [main]
+     → nothing runs. Use the manual trigger, or merge to main.
+  2. Typing vars.MY_SECRET instead of secrets.MY_SECRET (or vice versa)
+     → the value silently becomes empty.
+  3. Using tabs instead of spaces in YAML → "invalid workflow file".
+  4. Forgetting actions/checkout@v4 → "File not found" in your steps.
+  5. Forgetting to set the secret → job fails with "not defined".
+  6. Putting a real password in the workflow file → never do this!
+  7. Expecting jobs to share data → each job has its OWN fresh machine.
+  8. Watching `gh run watch` forever → Ctrl+C stops following; the run
+     itself keeps going.
+  9. Editing the workflow but not committing/pushing it → GitHub runs the
+     version that is ON GitHub, not the one on your disk.
+ 10. Giving up because logs look scary → use `gh run view <ID> --log-failed`;
+     it shows only the broken part. Read bottom-up: the last lines are the
+     real error.
+
+================================================================================
+PART 11 — GLOSSARY (every word, in one place)
+================================================================================
+
+  git         Tool that tracks every version of your code.
+  commit      A saved snapshot of changes, with a message.
+  branch      A separate line of history (you use "firstbranch").
+  main        The default/production branch. Deploys usually trigger here.
+  push        Send local commits to GitHub.
+  remote      The GitHub copy of the repo ("origin").
+  PR          Pull request: "please merge my branch into main".
+  CI          Continuous Integration: build + check on every change.
+  CD          Continuous Delivery/Deployment: ship to a server.
+  workflow    A YAML file in .github/workflows defining a pipeline.
+  event       Something that happened on GitHub (push, PR, manual...).
+  trigger     The "on:" condition that starts a workflow.
+  job         A big phase of a workflow, runs on its own machine.
+  step        One command inside a job.
+  runner      GitHub's rented virtual machine that runs jobs.
+  action      A reusable step (e.g. actions/checkout@v4).
+  expression  ${{ ... }} — inject dynamic values into a workflow.
+  variable    A plain, visible value stored in GitHub (vars.X).
+  secret      An encrypted, hidden value stored in GitHub (secrets.X).
+  GITHUB_TOKEN  Auto-created token for talking to the GitHub API.
+  environment  A scoped bucket of secrets/vars with optional approvals.
+  needs       Chain: "start this job only after that job succeeded".
+  YAML        The text format workflows are written in.
+  Docker      Packages apps into self-contained images.
+  image       The packaged app blueprint (e.g. mongo:latest).
+  container   A running instance of an image.
+  Docker Hub  Website that stores images (yazoo555/docker-recepie).
+  EC2         Amazon's rented virtual servers (where the app runs).
+  Elastic IP  A fixed public IP for your server.
+  deploy      Putting the new version of your app online.
+
+================================================================================
+PART 12 — YOUR ACTION PLAN (do these, in order)
+================================================================================
+
+  [ ] Read Part 4 again with dpy.yml open — point at every line.
+  [ ] Run:  gh workflow list                      (see "Basic Jobs Demo")
+  [ ] Run:  gh run list --workflow dpy.yml        (see your real runs)
+  [ ] Run:  gh run view <RUN_ID> --log            (read the full log)
+  [ ] Trigger it again:  gh workflow run "Basic Jobs Demo" --ref firstbranch
+      then:  gh run watch                         (watch it live)
+  [ ] Do the PRACTICE CHALLENGE from Part 8 (add a date job).
+  [ ] Set a NEW secret yourself:  gh secret set TEST_SECRET, reference it
+      as ${{ secrets.TEST_SECRET }} in a workflow, confirm it prints as ***.
+  [ ] Browse the Actions tab once:  gh browse actions
+  [ ] Later: read ghguide.txt (the full deploy guide) and Useme.txt.
+
+================================================================================
+ YOU NOW KNOW: what CI/CD is, how GitHub Actions works, what every line of
+ dpy.yml does, when it triggers, and how to write your own workflow.
+ Bookmark Part 4 (line-by-line) and Part 8 (how to write your own).
+================================================================================

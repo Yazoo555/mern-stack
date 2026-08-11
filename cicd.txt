@@ -1,0 +1,261 @@
+================================================================================
+ cicd.txt — How to SEE your CI/CD pipeline (dpy.yml) with git + gh commands
+================================================================================
+
+This file is a practical, command-only guide for YOUR repo (Yazoo555/mern-stack)
+and YOUR pipeline:  .github/workflows/dpy.yml  (workflow name: "Basic Jobs Demo")
+
+It answers two questions:
+  1) What does the pipeline do, and WHEN does it run?
+  2) Which git / gh commands let me SEE it and TRIGGER it?
+
+Copy-paste any command. Everything here is safe to run (read-only unless
+marked otherwise).
+
+================================================================================
+0) YOUR PIPELINE AT A GLANCE (what dpy.yml actually does)
+================================================================================
+
+Workflow name : "Basic Jobs Demo"   (file: .github/workflows/dpy.yml)
+Triggers      : a) push to the "main" branch  b) manual trigger (button / gh)
+
+It runs 3 jobs, one after another (each waits for the previous one):
+
+  JOB 1  "1 - Echo Variables and Secrets"
+         prints a repo variable (MY_VARIABLE) and a secret (MY_SECRET).
+         NOTE: the secret value shows as *** in the log (GitHub hides it).
+  JOB 2  "2 - Use a Shell Script with Vars and Secrets"   (needs job 1)
+         checks out your code and runs .github/workflows/print-vars-and-secrets.sh
+  JOB 3  "3 - Pull MongoDB"                                (needs job 2)
+         runs: docker pull mongo:latest   (downloads the Mongo image)
+
+So the whole pipeline = print stuff -> run a script -> pull Docker image.
+It is a DEMO pipeline: it does not build or deploy your app.
+
+IMPORTANT: it only auto-runs when you push to "main".  You are currently on
+branch "firstbranch", so pushing to firstbranch will NOT start it — you must
+trigger it manually (section 5) or merge into main first (section 6).
+
+The pipeline also needs 2 values set in GitHub, or Job 1 fails instantly:
+  - a repo VARIABLE named  MY_VARIABLE   (a normal, visible value)
+  - a SECRET  named  MY_SECRET           (a hidden value)
+See section 7 for how to set them.
+
+================================================================================
+1) GIT COMMANDS — see your code BEFORE CI runs it
+================================================================================
+
+  git status                      what files are changed/untracked
+  git diff                        the exact lines you changed (unstaged)
+  git diff --cached               the changes you already staged with git add
+  git log --oneline -10           last 10 commits, one line each
+  git branch --show-current       which branch you are on
+  git remote -v                   where your code lives on GitHub (origin)
+
+  # the everyday cycle (this is what makes CI start):
+  git add .                       stage everything
+  git commit -m "my message"      save a snapshot locally
+  git push origin firstbranch     send it to GitHub
+
+  # fix a typo in the last commit message
+  git commit --amend -m "better message"
+
+  # undo the last commit but KEEP the changes (in case you mess up)
+  git reset --soft HEAD~1
+
+================================================================================
+2) GH COMMANDS — see the pipeline definition and its state
+================================================================================
+
+  gh --version                    gh installed? which version?
+  gh auth status                  which GitHub account is logged in
+
+  gh workflow list                all workflows + active/disabled
+                                  -> you should see:  Basic Jobs Demo  active
+  gh workflow list --all          also show disabled workflows
+
+  gh run list                     last ~20 runs of ALL workflows
+  gh run list -L 5                just the 5 most recent
+  gh run list --workflow dpy.yml  only runs of YOUR pipeline
+  gh run list --status success    only successful runs
+  gh run list --status failure    only failed runs
+
+  # look at the pipeline YAML itself, right from the terminal:
+  cat .github/workflows/dpy.yml
+
+================================================================================
+3) GH COMMANDS — inspect a single run in detail
+================================================================================
+
+First grab a run id from  gh run list  (the long number in the ID column).
+
+  gh run view <RUN_ID>                    summary: jobs, status, branch, ref
+  gh run view <RUN_ID> --log              full log of every step (can be long)
+  gh run view <RUN_ID> --log-failed       ONLY the failing step's log
+                                          -> your #1 debugging command
+  gh run view <RUN_ID> --log --job 1      log of job 1 only (job numbering:
+                                          job 0, job 1, job 2 ... in order)
+
+  # follow a run live, like tail -f:
+  gh run watch <RUN_ID>                   wait until a run finishes, printing
+                                          progress; Ctrl-C to stop following
+
+  # browse the Actions tab in your browser:
+  gh browse                               opens the repo on github.com
+  gh browse actions                       opens the Actions tab directly
+
+================================================================================
+4) GH COMMANDS — re-run, cancel, delete a run
+================================================================================
+
+  gh run rerun <RUN_ID>               re-run a completed run (failed or success)
+  gh run rerun <RUN_ID> --failed      only re-run the jobs that failed
+  gh run cancel <RUN_ID>              stop a run that is still running
+  gh run delete <RUN_ID>              remove a run from the list (no undo!)
+
+================================================================================
+5) TRIGGERING THE PIPELINE MANUALLY (the important one for you!)
+================================================================================
+
+Since you are on "firstbranch" (not "main"), a normal push will NOT start
+dpy.yml.  Run this to start it manually from your current branch:
+
+  gh workflow run dpy.yml --ref firstbranch
+
+Or using the workflow NAME (also works, easier to read):
+
+  gh workflow run "Basic Jobs Demo" --ref firstbranch
+
+  --ref means "run from this branch's code". firstbranch = your branch.
+
+  You can even pass inputs to a workflow that defines them (dpy.yml does not,
+  but this is the syntax for the future):
+  gh workflow run dpy.yml --ref firstbranch -f name=value
+
+Then watch it:
+
+  gh run watch                       # follow the run you just started
+
+Expected result: Job 1 -> Job 2 -> Job 3 all green.
+NOTE: if you have NOT set MY_VARIABLE / MY_SECRET yet (section 7), Job 1
+fails immediately — that is expected until you set them.
+
+If the command errors with "workflow does not have 'workflow_dispatch'
+trigger", it means the file on GitHub does not have the manual-trigger
+block — dpy.yml does have it, so you are fine.
+
+================================================================================
+6) TRIGGERING AUTOMATICALLY (the "real" way: push to main)
+================================================================================
+
+dpy.yml auto-runs on pushes to "main".  Two ways to get your code to main:
+
+  A) fast, no review — merge locally and push:
+       git checkout main
+       git pull origin main
+       git merge firstbranch
+       git push origin main
+
+  B) the proper team way — open a pull request:
+       gh pr create --base main --head firstbranch --title "Deploy demo" --body "see dpy.yml run"
+       gh pr view --web                # open the PR in the browser
+       gh pr merge --merge             # merge it (or click "Merge" on GitHub)
+
+  Either way, pushing to main automatically starts "Basic Jobs Demo".
+  Watch it with:  gh run watch
+
+================================================================================
+7) SETTING MY_VARIABLE AND MY_SECRET (only needed once)
+================================================================================
+
+Job 1 reads a repo variable and a secret. Without them it fails with
+"MY_VARIABLE is not defined" style errors in the log.
+
+  # variable — visible value, can be any text:
+  gh variable set MY_VARIABLE --body "hello from cicd.txt"
+
+  # secret — hidden value (use this one for passwords/tokens):
+  gh secret set MY_SECRET
+      # gh asks: Paste value... type/paste it, press Enter. It is hidden.
+
+  # verify they exist (names only; secret values are never shown again):
+  gh variable list
+  gh secret list
+
+  # update later:
+  gh variable set MY_VARIABLE --body "new value"
+  gh secret set MY_SECRET          # re-type the new value
+
+For the DEPLOY workflow secrets (AWS + Docker Hub), use ./set-gh-secrets.sh
+— see ghguide.txt section 7 and Useme.txt section 3b.
+
+================================================================================
+8) READING THE OUTPUT — what the log tells you
+================================================================================
+
+Run  gh run view <RUN_ID> --log  and you will see sections per step. Examples:
+
+  | echo-vars-and-secrets (1 - Echo Variables and Secrets)
+  | MY_VARIABLE=hello from cicd.txt        <- the variable value
+  | MY_SECRET=***                          <- the secret, MASKED by GitHub
+  | GITHUB_TOKEN=***                       <- built-in token, also masked
+
+  Masking is a FEATURE: it proves the secret was passed in but hides its value.
+  If MY_SECRET showed the real value, that would be a security problem.
+
+  Job 2 then prints the same values from the shell script
+  (.github/workflows/print-vars-and-secrets.sh), and Job 3 shows docker
+  pulling mongo:latest.
+
+================================================================================
+9) COMMON PROBLEMS AND FIXES
+================================================================================
+
+  SYMPTOM                              FIX
+  -----------------------------------  ----------------------------------------
+  gh workflow run says "workflow      dpy.yml HAS workflow_dispatch, so this
+  does not have 'workflow_dispatch'   usually means the pushed file on GitHub
+  trigger"                             is an older version -> git push again
+                                       (and check cat .github/workflows/dpy.yml)
+  Job 1 fails: variable/secret         Set them (section 7) then:
+  "not defined"                        gh run rerun <RUN_ID>
+  I pushed to firstbranch but          Correct! dpy.yml only runs on main
+  nothing ran                          pushes. Use section 5 (manual) or 6.
+  gh run watch never finishes          Press Ctrl-C to stop following; the run
+                                       may just still be running (docker pull
+                                       can take a while).
+  "Could not resolve to a workflow"    Wrong name/file. Check with:
+                                       gh workflow list
+  Secret shows as ***                  That is normal and safe (section 8).
+
+================================================================================
+10) YOUR QUICK CHEAT SHEET (print this page)
+================================================================================
+
+  # --- git: see your work ---
+  git status | git diff | git log --oneline -10
+  git add . && git commit -m "msg" && git push origin firstbranch
+
+  # --- gh: see the pipeline ---
+  gh workflow list
+  gh run list --workflow dpy.yml
+  gh run view <RUN_ID> --log-failed
+  gh run watch
+
+  # --- gh: trigger it ---
+  gh workflow run "Basic Jobs Demo" --ref firstbranch
+  gh run watch
+
+  # --- gh: retry / stop ---
+  gh run rerun <RUN_ID>
+  gh run cancel <RUN_ID>
+
+  # --- once-only setup ---
+  gh variable set MY_VARIABLE --body "hello"
+  gh secret set MY_SECRET
+
+================================================================================
+ DONE! You can now SEE and TRIGGER your dpy.yml pipeline from the terminal.
+ Start here:  gh workflow list   then   gh workflow run "Basic Jobs Demo"
+ --ref firstbranch   then   gh run watch
+================================================================================
