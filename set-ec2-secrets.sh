@@ -9,7 +9,8 @@
 #   EC2_SSH_KEY    the ENTIRE contents of your .pem key (BEGIN to END lines)
 #
 # Usage — every time you launch/replace the EC2 instance, just re-run:
-#   ./set-ec2-secrets.sh --key ~/.ssh/mern-ec2-key.pem
+#   ./set-ec2-secrets.sh
+#   (your key path is hardcoded to ~/.ssh/mern-ec2-key.pem, so no --key needed)
 #
 # One-time setup (keeps a file you can edit instead of re-pasting):
 #   cp ec2-secrets.env.example ec2-secrets.env
@@ -128,7 +129,18 @@ elif [[ -f "ec2-secrets.env" ]]; then
     read_pem "${local_pem/#\~/$HOME}"
   fi
 else
-  echo "No ec2-secrets.env found — switching to interactive input."
+  echo "No ec2-secrets.env found."
+fi
+
+# ---------------------------------------------------------------------------
+# Default key: if nothing above supplied a key, fall back to the hardcoded
+# path before prompting interactively.
+# ---------------------------------------------------------------------------
+DEFAULT_KEY_FILE="$HOME/.ssh/mern-ec2-key.pem"
+if [[ -z "$EC2_SSH_KEY" && "$INTERACTIVE" -eq 0 && -f "$DEFAULT_KEY_FILE" ]]; then
+  read_pem "$DEFAULT_KEY_FILE"
+elif [[ -z "$EC2_SSH_KEY" && "$INTERACTIVE" -eq 0 ]]; then
+  echo "NOTE: default key not found at $DEFAULT_KEY_FILE — switching to interactive input."
 fi
 
 # ---------------------------------------------------------------------------

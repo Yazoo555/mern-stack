@@ -1,0 +1,120 @@
+================================================================================
+ useguide.txt — How to use the CI/CD setup (step by step)
+ Project: Yazoo555/mern-stack   (MERN Expense Tracker)
+================================================================================
+
+There are TWO phases: setup (repeat after every lab login, ~5 min) and the
+daily "ship code" flow.
+
+--------------------------------------------------------------------------------
+WHAT YOU HAVE NOW (quick recap)
+--------------------------------------------------------------------------------
+
+  Thing                                   What it does
+  -------------------------------------   ------------------------------------
+  .github/workflows/backend.yml           On push to main touching backend/**:
+                                          builds & pushes yazoo555/mern-server:latest,
+                                          then deploys it to EC2 on port 5000
+  .github/workflows/frontend.yml          Same for frontend/**: pushes
+                                          yazoo555/mern-client:latest, deploys on
+                                          port 5173 (with VITE_API_URL wired to
+                                          the backend)
+  scripts/build-and-push.sh               Shared script both pipelines call
+  scripts/deploy.sh                       Shared deploy script (SSH to EC2, docker run)
+  set-gh-secrets.sh + gh-secrets.env      Pushes your AWS + Docker Hub credentials
+                                          to GitHub Secrets
+  set-ec2-secrets.sh +                    Pushes EC2_HOST / EC2_USER / EC2_SSH_KEY
+  ec2-secrets.env.example                 to GitHub Secrets
+  set-aws-creds.sh                        Saves fresh lab AWS credentials locally
+
+--------------------------------------------------------------------------------
+PHASE 1 — SETUP (repeat after every lab login, ~5 min)
+--------------------------------------------------------------------------------
+
+STEP 1: Refresh your AWS credentials
+-------------------------------------------------------------------------------
+  ./set-aws-creds.sh
+
+  Paste the [default] block from the lab's "AWS Details" panel, press Ctrl-D.
+  It verifies the credentials and checks EC2 access.
+  (Your current ones are expired — this is the one to do first.)
+
+STEP 2: Refresh the GitHub secrets
+-------------------------------------------------------------------------------
+  cp gh-secrets.env.example gh-secrets.env     # only the first time
+  # edit gh-secrets.env: paste your current AWS values + Docker Hub token
+  ./set-gh-secrets.sh
+
+  This sets AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN,
+  DOCKERHUB_USERNAME, DOCKERHUB_TOKEN on GitHub.
+
+STEP 3: Set the EC2 secrets (once per EC2 instance, or whenever the IP changes)
+-------------------------------------------------------------------------------
+  ./set-ec2-secrets.sh --key ~/.ssh/mern-ec2-key.pem
+
+  It will ask for the EC2 public IP (AWS console -> EC2 -> Instances, or the
+  Elastic IP) and the SSH user (default ec2-user). It reads the whole .pem
+  automatically.
+
+STEP 4: Make sure your EC2 instance is RUNNING
+-------------------------------------------------------------------------------
+  AWS console -> EC2 -> Instances -> mern-app-server -> must be "running"
+  (start it if stopped). The deploy job SSHes into it and runs docker run, so
+  it needs Docker installed and ports 5000/5173 open — deploy.sh from last
+  week already set that up.
+
+--------------------------------------------------------------------------------
+PHASE 2 — SHIP CODE (daily use)
+--------------------------------------------------------------------------------
+
+STEP 5: Get your code onto main (the pipelines only watch main)
+-------------------------------------------------------------------------------
+  git checkout -b main            # create main once
+  git merge firstbranch           # bring your work in
+  git push origin main            # this is what triggers the pipelines
+
+  NOTE: there is currently no main branch at all — that is why nothing has
+  run yet. Pushes to firstbranch do NOT trigger any workflow.
+
+STEP 6: Make a change and watch the pipeline run
+-------------------------------------------------------------------------------
+  Edit anything under backend/, then:
+
+  git add .
+  git commit -m "my backend change"
+  git push origin main
+
+  GitHub now: builds the image -> pushes to Docker Hub -> SSHes to EC2 ->
+  restarts the container. Watch it live:
+
+  gh run watch                    # follow the run like tail -f
+  gh run list                     # recent runs
+  gh run view <RUN_ID> --log-failed   # only the failing step's log
+
+  Frontend changes work the same way — push something under frontend/ and
+  frontend.yml runs. Because of the paths: filter, a backend-only change
+  never rebuilds the frontend (and vice versa).
+
+--------------------------------------------------------------------------------
+THE THREE THINGS THAT MUST BE TRUE FOR A GREEN RUN
+--------------------------------------------------------------------------------
+
+  1. Secrets set on GitHub — Docker Hub (already set), EC2 ones (NOT yet —
+     do STEP 3)
+  2. EC2 instance running + reachable (STEP 4)
+  3. Push to main with the relevant folder changed (STEPS 5-6)
+
+--------------------------------------------------------------------------------
+SECURITY RULES (never break these)
+--------------------------------------------------------------------------------
+
+  - Never commit gh-secrets.env or ec2-secrets.env — both are gitignored;
+    the real values stay off GitHub
+  - Never paste your .pem into a workflow or script — only the EC2_SSH_KEY
+    secret holds it
+  - If a secret leaks, rotate it (new Docker Hub token / new lab creds) and
+    re-run the helpers
+
+================================================================================
+ DONE! Setup = STEPS 1-4. Shipping code = STEPS 5-6. Watch with gh run watch.
+================================================================================
