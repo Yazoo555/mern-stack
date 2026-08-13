@@ -1,0 +1,38 @@
+name: Frontend CI/CD
+
+on:
+  push:
+    branches: [main]
+    paths: ['frontend/**']      # only when frontend code changes
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build and push
+        run: bash scripts/build-and-push.sh
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          IMAGE: mern-client
+          CONTEXT: ./frontend
+
+  deploy:
+    needs: build-and-push      # only after the image is pushed
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy to EC2
+        run: bash scripts/deploy.sh
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          IMAGE: mern-client
+          CONTAINER: mern-client
+          PORT: 5173            # this repo's frontend (Vite) listens on 5173
+          API_URL: http://${{ secrets.EC2_HOST }}:5000   # backend's port, for VITE_API_URL
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USER: ${{ secrets.EC2_USER }}
+          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}

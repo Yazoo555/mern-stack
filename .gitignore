@@ -1,6 +1,7 @@
 node_modules/
 .env
 gh-secrets.env
+ec2-secrets.env
 .env.local
 dist/
 .DS_Store
