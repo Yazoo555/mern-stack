@@ -19,8 +19,10 @@ chmod 400 key.pem
 ssh -o StrictHostKeyChecking=accept-new -i key.pem \
   "$EC2_USER@$EC2_HOST" "
     docker pull $FULL_NAME
-    docker stop $CONTAINER 2>/dev/null || true
-    docker rm $CONTAINER 2>/dev/null || true
+    # Force-remove any container holding the port (not just ours), so a
+    # leftover container can't block the new one.
+    docker ps -aq --filter "publish=$PORT" | xargs -r docker rm -f
+    docker rm -f $CONTAINER 2>/dev/null || true
     docker run -d --name $CONTAINER \
       --restart always -p $PORT:$PORT $ENV_FLAGS $FULL_NAME
   "
