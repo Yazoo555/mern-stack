@@ -23,13 +23,19 @@ This project is designed as a **learning resource for Docker and Docker Compose*
 │   ├── index.html
 │   └── Dockerfile
 ├── docker-compose.yml      # Orchestrates all 3 services (local dev)
-├── docker-compose.prod.yml # Production compose template (Docker Hub images)
-├── deploy.sh               # One-command automated deployment to AWS EC2
-├── destroy.sh              # Safe teardown of the deployed AWS resources
+├── docker-compose.prod.yml # Legacy production compose template (Docker Hub images)
+├── deploy.sh               # Legacy one-command deployment to AWS EC2 (all-in-one)
+├── destroy.sh              # Safe teardown of the legacy deploy.sh resources
 ├── set-aws-creds.sh        # Paste fresh AWS lab credentials (run after each lab start)
+├── scripts/
+│   ├── setup-frontend-hosting.sh   # One-time S3 bucket + CloudFront setup
+│   ├── deploy-frontend-s3.sh       # Build frontend → upload to S3 → invalidate CloudFront
+│   ├── build-and-push.sh           # Build & push a Docker image (CI)
+│   └── deploy.sh                   # Deploy a Docker image to EC2 over SSH (CI)
 ├── .github/
 │   └── workflows/
-│       └── deploy.yml      # GitHub Actions CI/CD workflow
+│       ├── frontend.yml     # Frontend CI/CD → S3 + CloudFront
+│       └── backend.yml      # Backend CI/CD → Docker on EC2
 └── README.md
 ```
 
@@ -158,18 +164,45 @@ Example with overrides:
 INSTANCE_NAME=expense-prod AWS_REGION=eu-west-1 OUTPUT_FILE=deploy.env ./deploy.sh
 ```
 
+### Frontend hosting: S3 + CloudFront (current architecture)
+
+The frontend and backend are deployed **separately**:
+
+```
+Frontend → vite build → frontend/dist → S3 bucket → CloudFront (HTTPS)
+Backend  → Docker image → docker run on EC2 (port 5000)   ← EC2 runs backend only
+```
+
+**One-time AWS setup** (creates the private S3 bucket, the CloudFront distribution and its origin access identity — idempotent, safe to re-run):
+
+```bash
+./scripts/setup-frontend-hosting.sh
+```
+
+**Deploying the frontend** (build + upload to S3 + CloudFront cache invalidation):
+
+```bash
+API_URL=http://<EC2_HOST>:5000 ./scripts/deploy-frontend-s3.sh
+```
+
 ### GitHub Actions (CI/CD)
 
-[`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) runs the full pipeline automatically on pushes to `main` (or manually via **Actions → Deploy MERN to EC2 → Run workflow**). It is idempotent, so every run safely redeploys.
+Two independent workflows run on pushes to `main` (or manually via **Actions → Run workflow**):
 
-**Required repository secrets** (Settings → Secrets and variables → Actions):
+| Workflow | Trigger | What it does |
+|----------|---------|--------------|
+| `frontend.yml` | changes under `frontend/` | `vite build` (with `VITE_API_URL` baked in from the `EC2_HOST` secret) → upload to S3 → invalidate CloudFront |
+| `backend.yml` | changes under `backend/` | build `mern-server` Docker image → push to Docker Hub → `docker run` on EC2 (port 5000) |
+
+**Required repository secrets** (Settings → Secrets and variables → Actions, set by `set-gh-secrets.sh` / `set-ec2-secrets.sh`):
 
 | Secret | Value |
 |--------|-------|
-| `AWS_ACCESS_KEY_ID` | AWS access key with EC2 + VPC permissions |
-| `AWS_SECRET_ACCESS_KEY` | Matching AWS secret key |
-| `DOCKERHUB_USERNAME` | Docker Hub username |
-| `DOCKERHUB_TOKEN` | Docker Hub access token (Hub → Account Settings → Security) |
+| `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_SESSION_TOKEN` | AWS credentials (EC2 + S3 + CloudFront) |
+| `DOCKERHUB_USERNAME` / `DOCKERHUB_TOKEN` | Docker Hub credentials (backend image) |
+| `EC2_HOST` / `EC2_USER` / `EC2_SSH_KEY` | EC2 connection details (backend deploy + frontend API URL) |
+
+> The root `deploy.sh` / `destroy.sh` / `docker-compose.prod.yml` are the **legacy** all-in-one setup (MongoDB + backend + frontend together on one EC2 instance) and are no longer used by the CI/CD workflows.
 
 **Optional hardening:**
 
