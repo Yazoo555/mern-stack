@@ -3,85 +3,52 @@
   <head>
     <meta charset="UTF-8" />
 
-    <!-- Responsive layout -->
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0"
+    />
 
-    <!-- SEO -->
     <meta
       name="description"
-      content="Expense Tracker - Easily manage, track, and monitor your daily expenses."
+      content="Expense Tracker - Manage your income, expenses, and personal budget easily."
     />
+
     <meta
       name="keywords"
-      content="expense tracker, money management, budget, expenses, finance"
+      content="expense tracker, expenses, income, budget, finance, money management"
     />
+
     <meta name="author" content="Expense Tracker" />
 
-    <!-- Browser theme -->
     <meta name="theme-color" content="#4f46e5" />
 
-    <!-- Prevent unwanted telephone/email detection on mobile -->
-    <meta name="format-detection" content="telephone=no" />
-
-    <!-- Favicon -->
     <link
       rel="icon"
       href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💸</text></svg>"
     />
 
-    <!-- Apple touch icon -->
-    <link
-      rel="apple-touch-icon"
-      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💸</text></svg>"
-    />
-
-    <!-- Open Graph / Social Sharing -->
-    <meta property="og:title" content="Expense Tracker" />
-    <meta
-      property="og:description"
-      content="Track your income and expenses and keep your finances organized."
-    />
-    <meta property="og:type" content="website" />
-
-    <!-- Page title -->
-    <title>Expense Tracker | Manage Your Finances</title>
+    <title>Expense Tracker | Manage Your Money</title>
   </head>
 
   <body>
-    <!-- React application -->
-    <div id="root">
-      <div
-        style="
-          min-height: 100vh;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-family: Arial, sans-serif;
-          background: #f8fafc;
-          color: #475569;
-        "
-      >
-        Loading Expense Tracker...
-      </div>
-    </div>
+    <div id="root"></div>
 
-    <!-- Message for users without JavaScript -->
     <noscript>
       <div
         style="
-          padding: 2rem;
           text-align: center;
+          padding: 40px;
           font-family: Arial, sans-serif;
         "
       >
-        <h2>JavaScript is required</h2>
+        <h2>💸 Expense Tracker</h2>
         <p>
-          Please enable JavaScript in your browser to use the Expense Tracker.
+          JavaScript is required to use this application.
+          Please enable JavaScript in your browser.
         </p>
       </div>
     </noscript>
 
-    <!-- React entry point -->
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
